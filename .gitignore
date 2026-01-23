@@ -1,0 +1,43 @@
+# ===============================
+# Python / Backend
+# ===============================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.env
+
+# ===============================
+# ML Models (do NOT push binaries)
+# ===============================
+backend/models/*.h5
+backend/models/*.keras
+ai-model/**/models/*.h5
+ai-model/**/models/*.keras
+
+# ===============================
+# Datasets (VERY IMPORTANT)
+# ===============================
+ai-model/**/dataset/
+ai-model/**/raw/
+
+# ===============================
+# Logs
+# ===============================
+backend/logs/
+*.log
+
+# ===============================
+# OS junk
+# ===============================
+.DS_Store
+Thumbs.db
+
+# ===============================
+# IDE
+# ===============================
+.vscode/
+.idea/
