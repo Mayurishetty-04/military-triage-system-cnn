@@ -1,6 +1,13 @@
 # ===============================
 # Python / Backend
 # ===============================
+# Datasets
+Wound_dataset/
+ai-model/visual_dataset/
+backend/raw/
+
+# OS
+.DS_Store
 __pycache__/
 *.pyc
 *.pyo
