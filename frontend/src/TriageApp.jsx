@@ -268,65 +268,35 @@ const isBlurry = (canvas) => {
   };
 // ================= PDF REPORT =================
 
-const downloadPDF = () => {
-
+const downloadPDF = async () => {
   if (!result) return;
 
-  const doc = new jsPDF();
+  try {
+    const res = await axios.post(
+      "http://127.0.0.1:8000/download-report",
+      result, // 🔥 SEND THE FULL RESULT OBJECT
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "Content-Type": "application/json"
+        },
+        responseType: "blob"
+      }
+    );
 
-  doc.setFontSize(16);
-  doc.text("Military Triage Report", 20, 20);
-
-  doc.setFontSize(12);
-
-  let y = 35;
-
-  doc.text(`Patient ID: ${result.patient_id}`, 20, y);
-  y += 8;
-
-  doc.text(`Time: ${result.timestamp}`, 20, y);
-  y += 8;
-
-  doc.text(`Triage Level: ${result.triage_level}`, 20, y);
-  y += 8;
-
-  doc.text(
-    `Confidence: ${(result.confidence * 100).toFixed(1)}%`,
-    20,
-    y
-  );
-  y += 12;
-
-  doc.text("Analysis:", 20, y);
-  y += 8;
-
-  doc.text(`Audio: ${result.audio_raw.label}`, 25, y);
-  y += 8;
-
-  doc.text(`Image: ${result.visual_raw.label}`, 25, y);
-  y += 8;
-
-  doc.text(`Text: ${result.text_raw.label}`, 25, y);
-  y += 12;
-
-  if (result.warning) {
-    doc.setTextColor(200, 0, 0);
-    doc.text(`Warning: ${result.warning}`, 20, y);
-    doc.setTextColor(0, 0, 0);
-    y += 12;
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "triage_report.pdf");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (err) {
+    console.error("PDF download failed", err);
   }
-
-  doc.text("Medical Advice:", 20, y);
-  y += 8;
-
-  result.advice.forEach((item) => {
-    doc.text("- " + item, 25, y);
-    y += 7;
-  });
-
-  doc.save(`triage_${result.patient_id}.pdf`);
 };
 
+  
 
   // ================= UI =================
 
