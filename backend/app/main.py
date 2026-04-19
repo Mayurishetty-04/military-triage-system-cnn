@@ -1,6 +1,6 @@
 import io
 import random
-import datetime
+from datetime import datetime
 from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
@@ -8,6 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from pydantic import BaseModel
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 from app.database import engine, Base
 from app.auth import router as auth_router
@@ -17,7 +23,14 @@ import app.models as models
 from app.text_analyzer import analyze_text
 from app.vision_model import predict_visual
 from app.audio_model import predict_audio
-from app.vitals import vitals_override, calculate_dynamic_survival
+from app.vitals import (
+    vitals_override, 
+    calculate_dynamic_survival,
+    get_hr_status,
+    get_spo2_status,
+    get_bp_status,
+    get_physiological_syndrome
+)
 
 # Create tables on startup
 Base.metadata.create_all(bind=engine)
@@ -93,22 +106,22 @@ def receive_vitals(data: VitalData):
     """
     global latest_vitals
     triage = "GREEN"
-    reason = "Vitals within normal range"
+    reason = "Stable: Patient compensating well, normal vitals."
 
     # BLACK: Not survivable / completely unresponsive indicators
     if data.spo2 < 70 or data.heart_rate > 160 or data.systolic_bp < 60:
         triage = "BLACK"
-        reason = f"Critical: SpO2={data.spo2}%, HR={data.heart_rate}, SysBP={data.systolic_bp}"
+        reason = f"Expectant: Catastrophic/terminal collapse (SpO2={data.spo2}%, HR={data.heart_rate}, SysBP={data.systolic_bp})"
 
     # RED: Immediate life threat
     elif data.spo2 < 90 or data.heart_rate > 130 or data.heart_rate < 40 or data.systolic_bp < 80 or data.systolic_bp > 180:
         triage = "RED"
-        reason = f"Severe: SpO2={data.spo2}%, HR={data.heart_rate}, SysBP={data.systolic_bp}"
+        reason = f"Immediate: Severe oxygen starvation/collapse (SpO2={data.spo2}%, HR={data.heart_rate}, SysBP={data.systolic_bp})"
 
     # YELLOW: Delayed/moderate concern
     elif data.spo2 < 94 or data.heart_rate > 100 or data.heart_rate < 60 or data.systolic_bp < 90 or data.systolic_bp > 140:
         triage = "YELLOW"
-        reason = f"Moderate: SpO2={data.spo2}%, HR={data.heart_rate}, SysBP={data.systolic_bp}"
+        reason = f"Delayed: Early signs of stress/shock (SpO2={data.spo2}%, HR={data.heart_rate}, SysBP={data.systolic_bp})"
 
     # Store for frontend
     latest_vitals = {
@@ -352,6 +365,106 @@ def weighted_fusion(image_probs, audio_probs, text_probs, vitals_probs=None):
 
     return final
 
+def generate_explanation(label, pulse, spo2, systolic_bp, unconscious, override_reason, modalities_used):
+    if override_reason:
+        return f"Triage level '{label}' prioritized due to critical safety override: {override_reason}. Immediate life-saving protocols are in effect."
+        
+    hr_status = get_hr_status(pulse)
+    spo2_status = get_spo2_status(spo2)
+    bp_status = get_bp_status(systolic_bp)
+    syndrome = get_physiological_syndrome(pulse, spo2, systolic_bp)
+    
+    parts = []
+    
+    # Primary clinical assessment
+    if syndrome:
+        parts.append(f"AI Clinical Impression: {syndrome}.")
+    
+    # Vital-specific details
+    vital_details = []
+    if hr_status != "Normal" and hr_status != "Unknown": vital_details.append(f"{hr_status} ({pulse} bpm)")
+    if spo2_status != "Normal" and spo2_status != "Unknown": vital_details.append(f"{spo2_status} ({spo2}%)")
+    if bp_status != "Normal" and bp_status != "Unknown": vital_details.append(f"{bp_status} ({systolic_bp} mmHg sys)")
+    
+    if vital_details:
+        parts.append(f"Vital signs show: {', '.join(vital_details)}.")
+    else:
+        parts.append("Physiological parameters currently within baseline ranges.")
+
+    # Status-specific reasoning
+    if label == "Black":
+        parts.append("Condition is expectant; catastrophic system failure or non-survivable trauma indicated. Resources allocated to salvageable casualties.")
+    elif label == "Red":
+        parts.append("Immediate life-threat detected. Decompensated state requires instant medical intervention to prevent terminal collapse.")
+    elif label == "Yellow":
+        parts.append("Moderate physiological stress detected. Injuries require urgent but not immediate care. Patient requires close monitoring for decompensation.")
+    else:
+        parts.append("Patient is hemodynamically stable. Minor injuries confirmed by multi-modal analysis. Care can be delayed for more critical cases.")
+        
+    if modalities_used:
+        parts.append(f"Assessment cross-verified using: {', '.join(modalities_used).upper()}.")
+        
+    return " ".join(parts)
+
+
+def generate_class_explanations(pulse, spo2, systolic_bp, unconscious, override_reason, probabilities):
+    explanations = {}
+    
+    hr_status = get_hr_status(pulse)
+    spo2_status = get_spo2_status(spo2)
+    bp_status = get_bp_status(systolic_bp)
+    syndrome = get_physiological_syndrome(pulse, spo2, systolic_bp)
+    
+    if override_reason:
+        for c in CLASSES:
+            if c == "Black" and unconscious:
+                explanations[c] = f"Override applied: {override_reason}"
+            else:
+                explanations[c] = "Clinical indicators indicate extreme instability requiring manual override."
+        return explanations
+
+    # --- RED REASONING ---
+    if probabilities.get("Red", 0) > 0.15:
+        if syndrome == "Decompensated Shock (Likely Hemorrhage)":
+             explanations["Red"] = "High risk of hypovolemic shock due to critical hypotension and compensatory tachycardia."
+        elif "Hypoxemia" in spo2_status:
+             explanations["Red"] = f"Respiratory failure risk: {spo2_status} ({spo2}%) indicates urgent need for oxygenation."
+        elif bp_status == "Critical Hypotension":
+             explanations["Red"] = "Severe hypotension indicates lack of vital organ perfusion, requiring immediate resuscitation."
+        else:
+             explanations["Red"] = "Clinical markers and sensory AI suggest rapid deterioration potential requiring 'Immediate' category."
+    else:
+        explanations["Red"] = "Calculated risk of immediate life-threat is relatively low based on current data."
+
+    # --- YELLOW REASONING ---
+    if probabilities.get("Yellow", 0) > 0.15:
+        if hr_status == "Mild Tachycardia" or bp_status == "Hypotension" or spo2_status == "Mild Hypoxemia":
+            explanations["Yellow"] = f"Compensatory stress detected: {hr_status if hr_status != 'Normal' else ''} signs indicate moderate injury severity."
+        else:
+            explanations["Yellow"] = f"Moderate risk profile ({int(probabilities.get('Yellow', 0)*100)}%): Sensory inputs suggest injuries requiring urgent but non-immediate care."
+    else:
+         explanations["Yellow"] = "Symptoms do not align strongly with moderate, delayed-care profiles."
+         
+    # --- GREEN REASONING ---
+    if probabilities.get("Green", 0) > 0.15:
+        if hr_status == "Normal" and spo2_status == "Normal" and bp_status == "Normal":
+            explanations["Green"] = "Patient exhibits physiological stability with normal hemodynamic parameters. Minor injury profile."
+        else:
+            explanations["Green"] = "Body is currently compensating well for injuries. Risk of near-term collapse remains low."
+    else:
+        explanations["Green"] = "Stability indicators are overshadowed by moderate or severe injury markers."
+        
+    # --- BLACK REASONING ---
+    if probabilities.get("Black", 0) > 0.05:
+        if unconscious or syndrome == "Severe Circulatory Collapse" or syndrome == "Critical Respiratory Failure":
+             explanations["Black"] = f"Expectant state: Physiological markers ({syndrome if syndrome else 'Collapsing vitals'}) suggest catastrophic, non-survivable status."
+        else:
+             explanations["Black"] = "AI has flagged potential non-survivable injury patterns or extreme lack of responsiveness."
+    else:
+         explanations["Black"] = "No lethal or expectant indicators currently present."
+
+    return explanations
+
 
 # ============================================================
 # PREDICT ROUTE
@@ -479,10 +592,31 @@ async def predict(
     finally:
         db.close()
 
+    explanation = generate_explanation(
+        label=final_label,
+        pulse=pulse,
+        spo2=spo2,
+        systolic_bp=systolic_bp,
+        unconscious=unconscious,
+        override_reason=override_reason,
+        modalities_used=modalities_used
+    )
+
+    class_explanations = generate_class_explanations(
+        pulse=pulse,
+        spo2=spo2,
+        systolic_bp=systolic_bp,
+        unconscious=unconscious,
+        override_reason=override_reason,
+        probabilities=model_probabilities
+    )
+
     return {
         "patientId": patient_id,
         "patientName": current_user.username if current_user else None,
         "triage_level": final_label,
+        "explanation": explanation,
+        "class_explanations": class_explanations,
         "confidence": round(final_conf * 100, 1),
         "override_reason": override_reason,
         "probabilities": model_probabilities,
@@ -493,8 +627,57 @@ async def predict(
             "spo2": spo2,
             "systolic_bp": systolic_bp,
             "unconscious": unconscious
-        }
+        },
+        "resource_advice": get_resource_optimization_advice(final_label, vitals_payload)
     }
+
+
+def get_resource_optimization_advice(triage_level, vitals):
+    """
+    Generate dynamic resource optimization advice based on triage level and vitals.
+    """
+    level = triage_level.upper()
+    hr = vitals.get('pulse')
+    spo2 = vitals.get('spo2')
+    bp = vitals.get('systolic_bp')
+    
+    advice = {
+        "output": [],
+        "why": "Decision-support system (dynamic analytics)"
+    }
+    
+    if level == "RED":
+        advice["output"].append("🚨 PRIORITY 1: Immediate life-saving evacuation required.")
+        advice["output"].append("👨‍⚕️ Allocate trauma surgeon and senior nursing staff immediately.")
+        if spo2 and spo2 < 90:
+            advice["output"].append("💨 CRITICAL: Dispatch ALS unit with advanced airway management.")
+        elif hr and (hr > 130 or hr < 40):
+            advice["output"].append("💓 WARNING: High risk of cardiovascular collapse; prioritize telemetry transport.")
+    
+    elif level == "YELLOW":
+        advice["output"].append("🟡 PRIORITY 2: Urgent evacuation within 2-4 hours.")
+        advice["output"].append("🏥 Monitor vitals every 15-30 minutes for signs of decompensation.")
+        if spo2 and spo2 < 94:
+            advice["output"].append("🌬️ Administer supplemental oxygen; group with other respiratory-distressed casualties.")
+        advice["output"].append("🚑 Multi-casualty ambulance transport suitable.")
+        
+    elif level == "GREEN":
+        advice["output"].append("🟢 PRIORITY 3: Delayed evacuation (up to 24 hours).")
+        advice["output"].append("🩹 Apply self-aid or buddy-aid protocols.")
+        advice["output"].append("🚌 Utilize non-medical transport or multi-passenger vehicles for evacuation.")
+        advice["why"] = "Patient physiologically stable; resources optimized for critical care."
+        
+    elif level == "BLACK":
+        advice["output"].append("⚫ EXPECTANT: Provide palliative care and comfort measures.")
+        advice["output"].append("🛡️ Redirect intensive resources (surgeons/vials) to salvageable casualties.")
+        advice["output"].append("📝 Accurate biometric recording for subsequent identification.")
+        advice["why"] = "Resource optimization strategy focused on maximal survival across the unit."
+    
+    else:
+        advice["output"].append("Monitor clinical condition for changes.")
+        advice["why"] = "Baseline assessment only."
+        
+    return advice
 
 
 # ============================================================
@@ -503,7 +686,7 @@ async def predict(
 
 @app.post("/download-report")
 def download_report(data: dict):
-    from reportlab.lib import colors
+    buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     
     styles = getSampleStyleSheet()
@@ -640,6 +823,26 @@ def download_report(data: dict):
     ]))
     
     story.append(prob_table)
+    story.append(Spacer(1, 0.3*inch))
+
+    # Resource Optimization Engine
+    vitals = data.get("vitals", {})
+    opt_advice = get_resource_optimization_advice(triage_level, vitals)
+    
+    story.append(Paragraph("🚀 7. RESOURCE OPTIMIZATION ENGINE", heading_style))
+    opt_style = ParagraphStyle(
+        'opt_advice',
+        parent=styles['Normal'],
+        fontSize=11,
+        leftIndent=20,
+        spaceAfter=10,
+        fontName='Helvetica'
+    )
+    for a in opt_advice["output"]:
+        story.append(Paragraph(f"• {a}", opt_style))
+    
+    story.append(Paragraph(f"<i><b>Why:</b> {opt_advice['why']}</i>", 
+                           ParagraphStyle('opt_why', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#4b5563'), leftIndent=20, topMargin=5)))
     story.append(Spacer(1, 0.3*inch))
 
     # Recommended Actions

@@ -525,6 +525,18 @@ function TriageApp() {
                 </div>
               )}
 
+              {/* AI Explanation / Rationale */}
+              {result.explanation && (
+                <div className="bg-slate-700/50 p-6 rounded-xl border-l-4 border-l-blue-500 shadow-inner">
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <span>🧠</span> AI Rationale
+                  </h4>
+                  <p className="text-gray-200 text-lg leading-relaxed font-medium">
+                    {result.explanation}
+                  </p>
+                </div>
+              )}
+
               {/* Confidence */}
               <div className="bg-slate-700/30 p-6 rounded-xl border border-slate-600/50">
                 <p className="text-lg text-gray-200">
@@ -558,6 +570,29 @@ function TriageApp() {
                 </div>
               )}
 
+              {/* Resource Optimization Engine */}
+              {result.resource_advice && (
+                <div className="space-y-3 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+                  <h4 className="text-xl sm:text-2xl font-bold text-amber-400 flex items-center gap-2 uppercase tracking-wide">🚀 Resource Optimization advice</h4>
+                  <div className="bg-slate-700/60 border-2 border-amber-500/50 rounded-lg p-6 space-y-4 shadow-xl">
+                    <ul className="space-y-3">
+                      {result.resource_advice.output.map((item, i) => (
+                        <li key={i} className="text-amber-100 font-bold flex items-start gap-3">
+                          <span className="text-lg mt-1">⚡</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="pt-3 border-t border-slate-600/50">
+                      <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mb-1">Tactical Analysis Context</p>
+                      <p className="text-gray-300 italic text-sm font-medium">
+                        {result.resource_advice.why}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Probability Bars */}
               <div className="space-y-4">
                 <h4 className="text-xl sm:text-2xl font-bold text-blue-400 flex items-center gap-2 uppercase tracking-wide">📊 Integrated Triage Probability</h4>
@@ -580,6 +615,11 @@ function TriageApp() {
                           style={{ width: `${v * 100}%` }}
                         />
                       </div>
+                      {result.class_explanations && result.class_explanations[k] && (
+                        <p className="text-xs text-slate-400 italic mt-1 bg-slate-800/50 p-2 rounded border border-slate-700">
+                          {result.class_explanations[k]}
+                        </p>
+                      )}
                     </div>
                   );
                 })}

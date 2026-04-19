@@ -20,7 +20,7 @@ def _load_model():
     if model is None:
         import os
         if not os.path.exists(MODEL_PATH):
-            print(f"⚠️  Visual model not found at {MODEL_PATH} — skipping.")
+            print(f"Warning: Visual model not found at {MODEL_PATH} - skipping.")
             return None
         model = load_model(MODEL_PATH)
         print("✅ Visual CNN loaded")

@@ -151,3 +151,50 @@ def calculate_dynamic_survival(v, final_label):
         survival = max(15.0, min(94.0, survival))
         
     return round(survival, 1)
+
+
+def get_hr_status(hr):
+    if hr is None: return "Unknown"
+    if hr > 120: return "Severe Tachycardia"
+    if hr > 100: return "Mild Tachycardia"
+    if hr < 50: return "Severe Bradycardia"
+    if hr < 60: return "Mild Bradycardia"
+    return "Normal"
+
+def get_spo2_status(spo2):
+    if spo2 is None: return "Unknown"
+    if spo2 < 85: return "Severe Hypoxemia"
+    if spo2 < 92: return "Moderate Hypoxemia"
+    if spo2 < 95: return "Mild Hypoxemia"
+    return "Normal"
+
+def get_bp_status(sys_bp):
+    if sys_bp is None: return "Unknown"
+    if sys_bp < 70: return "Critical Hypotension"
+    if sys_bp < 90: return "Hypotension"
+    if sys_bp > 160: return "Severe Hypertension"
+    if sys_bp > 140: return "Hypertension"
+    return "Normal"
+
+def get_physiological_syndrome(hr, spo2, bp):
+    """
+    Identifies clinical syndromes based on vital patterns.
+    """
+    hr_s = get_hr_status(hr)
+    spo2_s = get_spo2_status(spo2)
+    bp_s = get_bp_status(bp)
+    
+    # Pattern matching
+    if bp_s == "Critical Hypotension" and hr_s in ["Normal", "Mild Bradycardia"]:
+        return "Potential Neurogenic Shock or Failing Compensation"
+    if bp_s in ["Critical Hypotension", "Hypotension"] and hr_s in ["Severe Tachycardia", "Mild Tachycardia"]:
+        return "Decompensated Shock (Likely Hemorrhage)"
+    if spo2_s in ["Severe Hypoxemia", "Moderate Hypoxemia"] and hr_s in ["Severe Tachycardia", "Mild Tachycardia"]:
+        return "Acute Respiratory Distress with Compensatory Tachycardia"
+    if bp_s == "Severe Hypertension" and hr_s in ["Severe Bradycardia", "Mild Bradycardia"]:
+        return "Cushing's Triad (Potential Intracranial Pressure)"
+    
+    if bp_s == "Critical Hypotension": return "Severe Circulatory Collapse"
+    if spo2_s == "Severe Hypoxemia": return "Critical Respiratory Failure"
+    
+    return None

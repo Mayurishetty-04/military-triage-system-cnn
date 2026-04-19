@@ -38,6 +38,7 @@ class Patient(Base):
     textScore = Column(Float, nullable=True)
     recommendation = Column(String)
     priority = Column(Integer)  # 1 for RED, 2 for YELLOW, 3 for GREEN, 4 for BLACK
+    explanation = Column(String, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     is_acknowledged = Column(Integer, default=0) # 0 for False, 1 for True (SQLite boolean)
