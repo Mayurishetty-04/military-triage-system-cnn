@@ -1,60 +1,76 @@
 # ===============================
 # Python / Backend
 # ===============================
-# Datasets
-Wound_dataset/
-ai-model/visual_dataset/
-backend/raw/
-
-# OS
-.DS_Store
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
 # Virtual environment
 venv/
-.env
+.venv/
+env/
+ENV/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+.Python
+
+# Backend data & logs
+backend/raw/
+backend/logs/
+*.log
 
 # Databases
+backend/*.db
+backend/*.sqlite3
 *.db
 *.sqlite3
 
 # ===============================
-# ML Models (do NOT push binaries)
+# Node / Frontend
 # ===============================
+node_modules/
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+.npm
+.eslintcache
+
+# ===============================
+# ML Models & Datasets
+# ===============================
+# Do NOT push large binaries or datasets
 backend/models/*.h5
 backend/models/*.keras
 ai-model/**/models/*.h5
 ai-model/**/models/*.keras
-
-# ===============================
-# Datasets (VERY IMPORTANT)
-# ===============================
 ai-model/**/dataset/
 ai-model/**/raw/
+ai-model/visual_dataset/
+Wound_dataset/
 
 # ===============================
-# Logs
+# Android Bridge
 # ===============================
-backend/logs/
-*.log
+android-bridge/.gradle/
+android-bridge/build/
+android-bridge/app/build/
+android-bridge/local.properties
+android-bridge/captures/
+.externalNativeBuild/
 
 # ===============================
-# OS junk
+# OS & IDE
 # ===============================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-# ===============================
-# IDE
-# ===============================
 .vscode/
 .idea/
-
-node_modules/
-
-android-bridge/.gradle
-android-bridge/build
-android-bridge/app/build
+*.swp
+*.swo
+.antigravity/

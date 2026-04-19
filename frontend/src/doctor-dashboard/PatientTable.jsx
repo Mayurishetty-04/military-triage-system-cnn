@@ -46,7 +46,14 @@ const PatientTable = ({ patients, onSelectPatient }) => {
                         const { chance, label } = getSurvivalDetails(patient.status, patient.survivalProbability);
                         return (
                             <tr key={patient.patientId} onClick={() => onSelectPatient(patient)}>
-                                <td>{patient.patientId}</td>
+                                <td>
+                                    <div style={{ lineHeight: 1.4 }}>
+                                        <div>{patient.patientId}</div>
+                                        {patient.patientName && (
+                                            <div style={{ fontSize: '0.8rem', color: '#a78bfa', marginTop: '2px' }}>👤 {patient.patientName}</div>
+                                        )}
+                                    </div>
+                                </td>
                                 <td>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <span className={`status-badge status-${patient.status}`}>

@@ -34,6 +34,9 @@ function Login() {
 
       localStorage.setItem("token", res.data.access_token);
       localStorage.setItem("role", res.data.role);
+      if (res.data.patientId) {
+        localStorage.setItem("patientId", res.data.patientId);
+      }
 
       if (res.data.role === "doctor") {
         navigate("/dashboard");

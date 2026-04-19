@@ -7,7 +7,7 @@ import 'leaflet/dist/leaflet.css';
 import Sidebar from './Sidebar';
 
 // Custom Marker Icons based on Status
-const getMarkerIcon = (status, isNew) => {
+const getMarkerIcon = (status, isNew, isHighlighted) => {
     const colors = {
         RED: '#ef4444',
         YELLOW: '#eab308',
@@ -18,7 +18,7 @@ const getMarkerIcon = (status, isNew) => {
     const size = isNew ? 32 : 24;
 
     const html = `
-        <div class="custom-marker ${isNew ? 'pulse-marker' : ''}" style="background-color: ${color}; width: ${size}px; height: ${size}px;">
+        <div class="custom-marker ${isNew ? 'pulse-marker' : ''} ${isHighlighted ? 'glow-marker' : ''}" style="background-color: ${color}; color: ${color}; width: ${size}px; height: ${size}px;">
             <div class="marker-dot"></div>
         </div>
     `;
@@ -57,6 +57,7 @@ const LiveMap = ({ patients: initialPatients, isStandAlone = false }) => {
     const [addresses, setAddresses] = useState({});
     const [history, setHistory] = useState([]);
     const [showHistory, setShowHistory] = useState(false);
+    const [highlightedStatus, setHighlightedStatus] = useState(null);
 
     // Standalone data fetching
     useEffect(() => {
@@ -191,10 +192,30 @@ const LiveMap = ({ patients: initialPatients, isStandAlone = false }) => {
                         <section className="panel-section">
                             <div className="section-label">📊 TRIAGE DISTRIBUTION</div>
                             <div className="distribution-grid">
-                                <div className="dist-item"><span className="count red">{stats.red}</span> RED</div>
-                                <div className="dist-item"><span className="count yellow">{stats.yellow}</span> YEL</div>
-                                <div className="dist-item"><span className="count green">{stats.green}</span> GRN</div>
-                                <div className="dist-item"><span className="count black">{stats.black}</span> BLK</div>
+                                <div 
+                                    className={`dist-item ${highlightedStatus === 'RED' ? 'active-highlight' : ''}`} 
+                                    onClick={() => setHighlightedStatus(prev => prev === 'RED' ? null : 'RED')}
+                                >
+                                    <span className="count red">{stats.red}</span> RED
+                                </div>
+                                <div 
+                                    className={`dist-item ${highlightedStatus === 'YELLOW' ? 'active-highlight' : ''}`} 
+                                    onClick={() => setHighlightedStatus(prev => prev === 'YELLOW' ? null : 'YELLOW')}
+                                >
+                                    <span className="count yellow">{stats.yellow}</span> YEL
+                                </div>
+                                <div 
+                                    className={`dist-item ${highlightedStatus === 'GREEN' ? 'active-highlight' : ''}`} 
+                                    onClick={() => setHighlightedStatus(prev => prev === 'GREEN' ? null : 'GREEN')}
+                                >
+                                    <span className="count green">{stats.green}</span> GRN
+                                </div>
+                                <div 
+                                    className={`dist-item ${highlightedStatus === 'BLACK' ? 'active-highlight' : ''}`} 
+                                    onClick={() => setHighlightedStatus(prev => prev === 'BLACK' ? null : 'BLACK')}
+                                >
+                                    <span className="count black">{stats.black}</span> BLK
+                                </div>
                             </div>
                         </section>
 
@@ -302,7 +323,7 @@ const LiveMap = ({ patients: initialPatients, isStandAlone = false }) => {
                         <Marker
                             key={patient.id}
                             position={[patient.latitude, patient.longitude]}
-                            icon={getMarkerIcon(patient.status, isPatientNew(patient.timestamp))}
+                            icon={getMarkerIcon(patient.status, isPatientNew(patient.timestamp), highlightedStatus === patient.status)}
                             eventHandlers={{
                                 click: () => handleMarkerClick(patient),
                             }}

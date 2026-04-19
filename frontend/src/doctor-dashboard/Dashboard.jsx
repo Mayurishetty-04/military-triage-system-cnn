@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import PatientTable from './PatientTable';
 import PatientDetails from './PatientDetails';
+import AIRecommendationModal from './AIRecommendationModal';
+import EmergencyResponseModal from './EmergencyResponseModal';
 import LiveMap from './LiveMap';
 import './styles.css';
 
@@ -12,12 +14,15 @@ const Dashboard = () => {
     const [patients, setPatients] = useState([]);
     const [activeView, setActiveView] = useState('dashboard');
     const [selectedPatient, setSelectedPatient] = useState(null);
+    const [selectedAIPatient, setSelectedAIPatient] = useState(null);
+    const [selectedEmergencyPatient, setSelectedEmergencyPatient] = useState(null);
     const [loading, setLoading] = useState(true);
     const [history, setHistory] = useState([]);
     const [showHistory, setShowHistory] = useState(false);
     const [prevCount, setPrevCount] = useState(0);
-    const [alertPatient, setAlertPatient] = useState(null);
-    const [lastKnownPatientTime, setLastKnownPatientTime] = useState(Date.now());
+    const [notifications, setNotifications] = useState([]);       // Array of alert objects
+    const seenKeys = React.useRef(new Set());                     // Track seen (patientId + timestamp) combos
+    const isFirstLoad = React.useRef(true);                       // Suppress alerts on initial page load
 
     // Filter and Sort states for Patients view
     const [searchTerm, setSearchTerm] = useState('');
@@ -30,29 +35,62 @@ const Dashboard = () => {
         navigate("/");
     };
 
+    // Request browser notification permission on load
+    useEffect(() => {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }, []);
+
     useEffect(() => {
         fetchPatients();
         const interval = setInterval(fetchPatients, 10000);
         return () => clearInterval(interval);
     }, []);
 
+    const dismissNotification = (id) => {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+    };
+
     const fetchPatients = async () => {
         try {
             const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
+            // Fetch ALL records (history) to properly detect every new triage event
             const res = await axios.get(`http://${backendHost}:8000/patients`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
             const data = res.data;
 
-            const newestPatient = data.length > 0 ? data[0] : null;
-            if (newestPatient) {
-                const patientTime = new Date(newestPatient.timestamp).getTime();
-                if (patientTime > lastKnownPatientTime) {
-                    setAlertPatient(newestPatient);
-                    setLastKnownPatientTime(patientTime);
-                    // Clear notification after 10 seconds
-                    setTimeout(() => setAlertPatient(null), 10000);
+            // Detect new triage events using unique (patientId + timestamp) key
+            const newAlerts = [];
+            data.forEach(p => {
+                const key = `${p.patientId}__${p.timestamp}`;
+                if (!seenKeys.current.has(key)) {
+                    seenKeys.current.add(key);
+                    // Only alert after the first load is complete (avoid false alarms on page load)
+                    if (!isFirstLoad.current) {
+                        newAlerts.push({
+                            id: key,
+                            patient: p,
+                            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        });
+                    }
                 }
+            });
+            // Mark first load complete so subsequent polls can trigger alerts
+            isFirstLoad.current = false;
+
+            if (newAlerts.length > 0) {
+                setNotifications(prev => [...newAlerts, ...prev].slice(0, 5)); // keep latest 5
+                // Browser push notification
+                newAlerts.forEach(alert => {
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('🚨 New Triage Input', {
+                            body: `Patient ${alert.patient.patientId} — Status: ${alert.patient.status}`,
+                            icon: '/favicon.ico'
+                        });
+                    }
+                });
             }
 
             setPatients(data);
@@ -77,12 +115,18 @@ const Dashboard = () => {
         }
     };
 
+    const handleAcknowledge = (recordId) => {
+        setPatients(prev => prev.map(p => 
+            p.id === recordId ? { ...p, is_acknowledged: 1 } : p
+        ));
+    };
+
     const renderContent = () => {
         if (loading) return <div className="loading-state">Loading triage data...</div>;
 
         switch (activeView) {
             case 'dashboard':
-                const criticalPatients = patients.filter(p => p.status === 'RED');
+                const criticalPatients = patients.filter(p => p.status === 'RED' && p.is_acknowledged !== 1);
                 const stats = {
                     total: patients.length,
                     red: criticalPatients.length,
@@ -94,20 +138,6 @@ const Dashboard = () => {
 
                 return (
                     <div className="view-container">
-                        {/* New Patient Alert Notification */}
-                        {alertPatient && (
-                            <div className="new-casualty-alert" onClick={() => {
-                                setSelectedPatient(alertPatient);
-                                setAlertPatient(null);
-                            }}>
-                                <div className="alert-pulse"></div>
-                                <div className="alert-text">
-                                    <strong>🚨 NEW CASUALTY DETECTED</strong>
-                                    <span>ID: {alertPatient.patientId} - STATUS: {alertPatient.status}</span>
-                                </div>
-                                <div className="alert-action">VIEW INTEL</div>
-                            </div>
-                        )}
 
                         <header className="view-header">
                             <h2 style={{ fontSize: '2.5rem', letterSpacing: '-0.03em' }}>Triage Dashboard</h2>
@@ -254,60 +284,19 @@ const Dashboard = () => {
 
                         <PatientTable patients={filteredPatients} onSelectPatient={setSelectedPatient} />
 
-                        {/* Patient Details Modal */}
-                        {selectedPatient && (
-                            <PatientDetails
-                                patient={selectedPatient}
-                                onClose={() => setSelectedPatient(null)}
-                                onViewHistory={() => fetchHistory(selectedPatient.patientId)}
-                            />
-                        )}
 
-                        {/* Clinical History Modal */}
-                        {showHistory && (
-                            <div className="history-modal-overlay" style={{ zIndex: 10001 }}>
-                                <div className="history-modal" style={{ background: '#1e293b' }}>
-                                    <div className="modal-header">
-                                        <h2>CLINICAL TIMELINE: {selectedPatient?.patientId}</h2>
-                                        <button className="close-btn" onClick={() => setShowHistory(false)}>×</button>
-                                    </div>
-                                    <div className="timeline-container">
-                                        {history.map((entry, idx) => (
-                                            <div key={entry.id} className="timeline-item">
-                                                <div className="timeline-marker"></div>
-                                                <div className="timeline-content">
-                                                    <div className="timeline-time">
-                                                        {new Date(entry.timestamp).toLocaleString()}
-                                                        {idx === 0 && <span className="latest-badge">LATEST</span>}
-                                                    </div>
-                                                    <div className="timeline-details">
-                                                        <span className={`status-pill ${entry.status.toLowerCase()}`}>{entry.status}</span>
-                                                        <div className="vitals-snapshot">
-                                                            <span>💓 {entry.heartRate} BPM</span>
-                                                            <span>🩸 {entry.spo2}% SpO2</span>
-                                                            <span>📈 {entry.survivalProbability}% Surv</span>
-                                                        </div>
-                                                        <div className="recommendation-snapshot">{entry.recommendation}</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 );
             case 'alerts':
-                const redOnly = patients.filter(p => p.status === 'RED');
+                const unacknowledged = patients.filter(p => p.is_acknowledged !== 1);
                 return (
                     <div className="view-container">
                         <header className="view-header" style={{ textAlign: 'center' }}>
                             <h2 style={{ color: '#ef4444', fontSize: '2.5rem' }}>🚨 URGENT RESPONSE MODE</h2>
                             <p style={{ color: '#fca5a5', fontWeight: 'bold' }}>IMMEDIATE MEDICAL INTERVENTION REQUIRED</p>
                         </header>
-                        <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '2rem', borderRadius: '1.5rem', border: '2px solid #ef4444' }}>
-                            <PatientTable patients={redOnly} onSelectPatient={setSelectedPatient} />
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '2rem', borderRadius: '1.5rem', border: '2px solid rgba(255,255,255,0.1)' }}>
+                            <PatientTable patients={unacknowledged} onSelectPatient={setSelectedEmergencyPatient} />
                         </div>
                     </div>
                 );
@@ -514,7 +503,7 @@ const Dashboard = () => {
                                 <div
                                     key={p.patientId}
                                     className="recommendation-card"
-                                    onClick={() => setSelectedPatient(p)}
+                                    onClick={() => setSelectedAIPatient(p)}
                                     style={p.status === 'RED' ? { borderLeft: '4px solid #ef4444', background: 'rgba(239, 68, 68, 0.1)' } : {}}
                                 >
                                     <div className="card-header">
@@ -579,10 +568,87 @@ const Dashboard = () => {
                 </div>
             )}
 
+            {/* 🔔 Global Notification Toast Stack — appears on all views */}
+            {notifications.length > 0 && (
+                <div style={{
+                    position: 'fixed', bottom: '1.5rem', right: '1.5rem',
+                    display: 'flex', flexDirection: 'column-reverse', gap: '0.75rem',
+                    zIndex: 20000, maxWidth: '380px', width: '100%'
+                }}>
+                    {notifications.map(notif => {
+                        const statusColor = {
+                            RED: '#ef4444', YELLOW: '#eab308',
+                            GREEN: '#22c55e', BLACK: '#475569'
+                        }[notif.patient.status] || '#38bdf8';
+
+                        return (
+                            <div key={notif.id} style={{
+                                background: '#1e293b',
+                                border: `1px solid ${statusColor}55`,
+                                borderLeft: `4px solid ${statusColor}`,
+                                borderRadius: '0.75rem',
+                                padding: '1rem 1.25rem',
+                                boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
+                                display: 'flex', alignItems: 'flex-start',
+                                gap: '0.75rem', animation: 'slideInRight 0.3s ease'
+                            }}>
+                                <div style={{ fontSize: '1.5rem', marginTop: '-2px' }}>
+                                    {notif.patient.status === 'RED' ? '🚨' :
+                                        notif.patient.status === 'YELLOW' ? '⚠️' :
+                                            notif.patient.status === 'BLACK' ? '💀' : '✅'}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.95rem' }}>
+                                        New Triage Input
+                                    </div>
+                                    <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+                                        <strong style={{ color: statusColor }}>ID: {notif.patient.patientId}</strong>
+                                        {notif.patient.patientName && (
+                                            <span style={{ color: '#a78bfa', marginLeft: '6px' }}>👤 {notif.patient.patientName}</span>
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                                        <span style={{ background: `${statusColor}22`, color: statusColor, padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                            {notif.patient.status}
+                                        </span>
+                                        <span style={{ color: '#64748b', fontSize: '0.75rem', alignSelf: 'center' }}>{notif.time}</span>
+                                    </div>
+                                    <button
+                                        onClick={() => { setSelectedPatient(notif.patient); dismissNotification(notif.id); }}
+                                        style={{ marginTop: '0.6rem', fontSize: '0.75rem', color: '#38bdf8', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                    >
+                                        View Patient →
+                                    </button>
+                                </div>
+                                <button onClick={() => dismissNotification(notif.id)} style={{ background: 'transparent', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, marginTop: '-2px' }}>
+                                    ×
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
             {selectedPatient && (
                 <PatientDetails
                     patient={selectedPatient}
                     onClose={() => setSelectedPatient(null)}
+                    onViewHistory={() => fetchHistory(selectedPatient.patientId)}
+                />
+            )}
+
+            {selectedAIPatient && (
+                <AIRecommendationModal
+                    patient={selectedAIPatient}
+                    onClose={() => setSelectedAIPatient(null)}
+                />
+            )}
+
+            {selectedEmergencyPatient && (
+                <EmergencyResponseModal
+                    patient={selectedEmergencyPatient}
+                    onClose={() => setSelectedEmergencyPatient(null)}
+                    onAcknowledge={handleAcknowledge}
                 />
             )}
         </div>

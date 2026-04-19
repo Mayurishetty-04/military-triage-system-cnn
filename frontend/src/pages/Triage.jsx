@@ -15,6 +15,27 @@ function TriageApp() {
   const [systolicBP, setSystolicBP] = useState("");
   const [unconscious, setUnconscious] = useState(false);
   const [liveVitals, setLiveVitals] = useState(null);
+  const [currentUsername, setCurrentUsername] = useState("");
+  const [currentPatientId, setCurrentPatientId] = useState("");
+
+  // Decode JWT to get logged-in username
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const storedPatientId = localStorage.getItem("patientId");
+    
+    if (storedPatientId) {
+      setCurrentPatientId(storedPatientId);
+    }
+
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setCurrentUsername(payload.sub || payload.username || "");
+      } catch (e) {
+        // token not decodable, ignore
+      }
+    }
+  }, []);
 
   // Poll for live vitals from Android Bridge
   useEffect(() => {
@@ -187,6 +208,7 @@ function TriageApp() {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       setResult(res.data);
+      if (res.data.patientId) setCurrentPatientId(res.data.patientId);
     } catch (err) {
       console.error(err);
       alert("Backend error. Is server running?");
@@ -224,6 +246,7 @@ function TriageApp() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
+    localStorage.removeItem("patientId");
     navigate("/");
   };
 
@@ -252,6 +275,17 @@ function TriageApp() {
             Military Triage System
           </h1>
           <p className="text-gray-300 text-sm sm:text-base font-light">Multi-Modal Injury Assessment</p>
+          {currentUsername && (
+            <div className="mt-3 inline-flex items-center gap-2 bg-slate-700/60 border border-slate-600/50 rounded-full px-4 py-1.5">
+              <span className="text-amber-400 text-sm font-semibold">👤 {currentUsername}</span>
+              {currentPatientId && (
+                <>
+                  <span className="text-slate-500 text-sm">|</span>
+                  <span className="text-slate-300 text-sm font-mono">{currentPatientId}</span>
+                </>
+              )}
+            </div>
+          )}
           <div className="h-1 w-20 bg-gradient-to-r from-amber-400 to-cyan-400 mx-auto rounded-full mt-4"></div>
         </div>
 
@@ -479,6 +513,17 @@ function TriageApp() {
               >
                 TRIAGE LEVEL: {result.triage_level}
               </div>
+
+              {/* Patient ID + Name */}
+              {result.patientId && (
+                <div className="flex items-center gap-3 bg-slate-700/40 border border-slate-600/40 rounded-xl px-5 py-3">
+                  <span className="text-gray-400 text-sm font-semibold uppercase tracking-wide">Patient</span>
+                  <span className="text-white font-bold">{result.patientId}</span>
+                  {result.patientName && (
+                    <span className="text-amber-400 font-semibold ml-1">· 👤 {result.patientName}</span>
+                  )}
+                </div>
+              )}
 
               {/* Confidence */}
               <div className="bg-slate-700/30 p-6 rounded-xl border border-slate-600/50">

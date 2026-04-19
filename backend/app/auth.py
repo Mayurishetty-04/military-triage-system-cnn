@@ -9,6 +9,8 @@ from app.security import (
     verify_password,
     create_access_token
 )
+import datetime
+import random
 
 router = APIRouter()
 
@@ -41,6 +43,9 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
             hashed_password=hash_password(data.password),
             role=data.role
         )
+
+        if data.role == "patient":
+            new_user.patientId = f"PAT-{int(datetime.datetime.now().timestamp())}-{random.randint(100, 999)}"
 
         db.add(new_user)
         db.commit()
@@ -77,6 +82,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     return {
         "access_token": token,
         "token_type": "bearer",
-        "role": user.role
+        "role": user.role,
+        "patientId": user.patientId
     }
 

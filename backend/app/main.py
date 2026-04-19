@@ -169,15 +169,16 @@ def create_patient(patient: PatientCreate, db = Depends(get_db)):
 
 @app.get("/patients")
 def get_patients(db = Depends(get_db)):
-    # Get only the latest record for each unique patientId
+    # Get only the latest record for each unique patientId by comparing timestamps
     subquery = db.query(
         models.Patient.patientId,
-        func.max(models.Patient.id).label('max_id')
+        func.max(models.Patient.timestamp).label('max_time')
     ).group_by(models.Patient.patientId).subquery()
     
     patients = db.query(models.Patient).join(
         subquery,
-        models.Patient.id == subquery.c.max_id
+        (models.Patient.patientId == subquery.c.patientId) &
+        (models.Patient.timestamp == subquery.c.max_time)
     ).order_by(models.Patient.priority.asc()).all()
     
     return patients
@@ -208,6 +209,17 @@ def update_patient(patient_id: str, patient_update: PatientUpdate, db = Depends(
     db.commit()
     db.refresh(db_patient)
     return db_patient
+
+@app.post("/patients/{id}/acknowledge")
+def acknowledge_patient(id: int, db = Depends(get_db)):
+    db_patient = db.query(models.Patient).filter(models.Patient.id == id).first()
+    if not db_patient:
+        raise HTTPException(status_code=404, detail="Patient record not found")
+    
+    db_patient.is_acknowledged = 1
+    db.commit()
+    db.refresh(db_patient)
+    return {"message": "Patient alert acknowledged successfully", "patientId": db_patient.patientId}
 
 # ============================================================
 # CONSTANTS
@@ -419,22 +431,17 @@ async def predict(
     try:
         # 1. Determine stable patientId
         if not patient_id:
-            if current_user and current_user.role == "patient":
-                # Check for existing records for this user
-                existing_patient = db.query(models.Patient).filter(models.Patient.user_id == current_user.id).order_by(models.Patient.timestamp.desc()).first()
-                if existing_patient and not existing_patient.patientId.startswith("PAT-USR-"):
-                    patient_id = existing_patient.patientId
-                else:
-                    # New identity for this user
-                    patient_id = f"PAT-{int(datetime.datetime.now().timestamp())}-{random.randint(100, 999)}"
+            if current_user and current_user.role == "patient" and current_user.patientId:
+                patient_id = current_user.patientId
             else:
-                # Anonymous or legacy fallback
+                # Anonymous or legacy fallback identity
                 patient_id = f"PAT-{int(datetime.datetime.now().timestamp())}-{random.randint(100, 999)}"
     
         # Map AI scores (using probabilities for now or max confidence)
         ai_scores = {
             "image": image_probs.get(final_label, 0) if visual_raw else 0.0,
             "audio": audio_probs.get(final_label, 0) if audio_raw else 0.0,
+            "text": text_probs.get(final_label, 0) if text_raw else 0.0,
             "video": 0.0
         }
         # Calculate Survival Probability based on sophisticated clinical logic
@@ -449,6 +456,7 @@ async def predict(
         priority_map = {"RED": 1, "YELLOW": 2, "GREEN": 3, "BLACK": 4}
         db_patient = models.Patient(
             patientId=patient_id,
+            patientName=current_user.username if current_user else None,
             status=final_label.upper(),
             survivalProbability=dynamic_survival,
             injuryType=text if text else "Unknown",
@@ -456,6 +464,7 @@ async def predict(
             heartRate=pulse if pulse else 0,
             imageScore=ai_scores["image"],
             audioScore=ai_scores["audio"],
+            textScore=ai_scores["text"],
             videoScore=ai_scores["video"],
             recommendation=", ".join(TRIAGE_ACTIONS[final_label]),
             priority=priority_map.get(final_label.upper(), 4),
@@ -472,10 +481,11 @@ async def predict(
 
     return {
         "patientId": patient_id,
+        "patientName": current_user.username if current_user else None,
         "triage_level": final_label,
         "confidence": round(final_conf * 100, 1),
         "override_reason": override_reason,
-        "probabilities": final_probabilities,
+        "probabilities": model_probabilities,
         "recommended_action": TRIAGE_ACTIONS.get(final_label, ["Monitor condition"]),
         "modalities_used": modalities_used,
         "vitals": {
