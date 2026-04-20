@@ -6,12 +6,14 @@ import PatientTable from './PatientTable';
 import PatientDetails from './PatientDetails';
 import AIRecommendationModal from './AIRecommendationModal';
 import EmergencyResponseModal from './EmergencyResponseModal';
-import LiveMap from './LiveMap';
+import ChatPanel from '../components/ChatPanel';
+import useMessageNotifications from '../hooks/useMessageNotifications';
 import './styles.css';
 
 const Dashboard = () => {
     const navigate = useNavigate();
     const [patients, setPatients] = useState([]);
+    const [registeredPatients, setRegisteredPatients] = useState([]);
     const [activeView, setActiveView] = useState('dashboard');
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [selectedAIPatient, setSelectedAIPatient] = useState(null);
@@ -19,8 +21,12 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [history, setHistory] = useState([]);
     const [showHistory, setShowHistory] = useState(false);
-    const [prevCount, setPrevCount] = useState(0);
     const [notifications, setNotifications] = useState([]);       // Array of alert objects
+    const [chatOpen, setChatOpen] = useState(false);
+    const [selectedChatPatientId, setSelectedChatPatientId] = useState(null);
+    const [selectedChatPatientName, setSelectedChatPatientName] = useState(null);
+    const [chatInboxOpen, setChatInboxOpen] = useState(false);
+    const [conversations, setConversations] = useState([]);
     const seenKeys = React.useRef(new Set());                     // Track seen (patientId + timestamp) combos
     const isFirstLoad = React.useRef(true);                       // Suppress alerts on initial page load
 
@@ -32,20 +38,71 @@ const Dashboard = () => {
     const handleLogout = () => {
         localStorage.removeItem("token");
         localStorage.removeItem("role");
+        localStorage.removeItem("userId");
         navigate("/");
     };
 
-    // Request browser notification permission on load
+    // Request browser notification permission on load and store user ID
     useEffect(() => {
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
         }
+        
+        const token = localStorage.getItem("token");
+        if (token) {
+            try {
+                const payload = JSON.parse(atob(token.split(".")[1]));
+                if (payload.user_id) {
+                    localStorage.setItem("userId", payload.user_id);
+                }
+            } catch (e) {
+                console.error("Failed to decode token:", e);
+            }
+        }
     }, []);
+
+    // Enable message notifications
+    useMessageNotifications();
+
+    const fetchConversations = async () => {
+        try {
+            const res = await axios.get('http://127.0.0.1:8000/messages/conversations', {
+                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+            });
+            setConversations(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            // Silent fail - chat panel will surface issues when opened
+        }
+    };
+
+    // Poll conversations so new patients appear in inbox
+    useEffect(() => {
+        fetchConversations();
+        const interval = setInterval(fetchConversations, 3000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const fetchRegisteredPatients = async () => {
+        try {
+            const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
+            const res = await axios.get(`http://${backendHost}:8000/users/patients`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+            });
+            setRegisteredPatients(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            // Non-fatal: dashboard can still run on triage submissions
+        }
+    };
 
     useEffect(() => {
         fetchPatients();
+        fetchRegisteredPatients();
         const interval = setInterval(fetchPatients, 10000);
-        return () => clearInterval(interval);
+        const rosterInterval = setInterval(fetchRegisteredPatients, 30000);
+        return () => {
+            clearInterval(interval);
+            clearInterval(rosterInterval);
+        };
     }, []);
 
     const dismissNotification = (id) => {
@@ -94,7 +151,6 @@ const Dashboard = () => {
             }
 
             setPatients(data);
-            setPrevCount(data.length);
         } catch (err) {
             console.error("Failed to fetch patients", err);
         } finally {
@@ -128,7 +184,8 @@ const Dashboard = () => {
             case 'dashboard':
                 const criticalPatients = patients.filter(p => p.status === 'RED' && p.is_acknowledged !== 1);
                 const stats = {
-                    total: patients.length,
+                    total: registeredPatients.length || patients.length,
+                    triageTotal: patients.length,
                     red: criticalPatients.length,
                     yellow: patients.filter(p => p.status === 'YELLOW').length,
                     green: patients.filter(p => p.status === 'GREEN').length,
@@ -148,7 +205,10 @@ const Dashboard = () => {
                         <div className="stats-grid">
                             <div className="stat-card" style={{ '--accent-color': '#64748b' }}>
                                 <div className="stat-value">{stats.total}</div>
-                                <div className="stat-label">Total Patients</div>
+                                <div className="stat-label">Total Patients (Registered)</div>
+                                <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700 }}>
+                                    Triage submissions: {stats.triageTotal}
+                                </div>
                             </div>
                             <div className="stat-card" style={{ '--accent-color': '#ef4444' }}>
                                 <div className="stat-value" style={{ color: '#ef4444' }}>{stats.red}</div>
@@ -246,13 +306,48 @@ const Dashboard = () => {
                     </div>
                 );
             case 'patients':
-                let filteredPatients = patients.filter(p =>
-                    p.patientId.toLowerCase().includes(searchTerm.toLowerCase()) &&
-                    (statusFilter === 'ALL' || p.status === statusFilter)
+                // Merge registered patients with latest triage record (if any)
+                const triageByUserId = new Map(
+                    patients
+                        .filter(p => p.user_id != null)
+                        .map(p => [Number(p.user_id), p])
                 );
 
-                if (sortOrder === 'newest') filteredPatients.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                else if (sortOrder === 'priority') filteredPatients.sort((a, b) => a.priority - b.priority);
+                const mergedPatients = (registeredPatients.length > 0 ? registeredPatients : []).map(u => {
+                    const triage = triageByUserId.get(Number(u.id));
+                    if (triage) return triage;
+                    return {
+                        patientId: u.patientId || `USER-${u.id}`,
+                        patientName: u.username,
+                        status: 'NONE',
+                        survivalProbability: null,
+                        priority: null,
+                        timestamp: null,
+                        user_id: u.id
+                    };
+                });
+
+                // If roster endpoint failed, fall back to triage list
+                const baseList = mergedPatients.length > 0 ? mergedPatients : patients;
+
+                let filteredPatients = baseList.filter(p =>
+                    String(p.patientId || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+                    (statusFilter === 'ALL' || p.status === statusFilter || (statusFilter === 'ALL' && p.status === 'NONE'))
+                );
+
+                if (sortOrder === 'newest') {
+                    filteredPatients.sort((a, b) => {
+                        const at = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                        const bt = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                        return bt - at;
+                    });
+                } else if (sortOrder === 'priority') {
+                    filteredPatients.sort((a, b) => {
+                        const ap = a.priority != null ? a.priority : 999;
+                        const bp = b.priority != null ? b.priority : 999;
+                        return ap - bp;
+                    });
+                }
 
                 return (
                     <div className="view-container">
@@ -275,6 +370,7 @@ const Dashboard = () => {
                                 <option value="YELLOW">YELLOW</option>
                                 <option value="GREEN">GREEN</option>
                                 <option value="BLACK">BLACK</option>
+                                <option value="NONE">NO TRIAGE</option>
                             </select>
                             <select className="filter-select" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
                                 <option value="newest">Sort: Newest First</option>
@@ -336,7 +432,6 @@ const Dashboard = () => {
                 // Advanced Automated Intelligence Engine
                 const insights = [];
                 const criticalRatio = counts.RED / total;
-                const moderateRatio = counts.YELLOW / total;
 
                 // 1. Critical Mass Detection
                 if (counts.RED >= 3) {
@@ -533,6 +628,180 @@ const Dashboard = () => {
                 {renderContent()}
             </main>
 
+            {/* Chat Inbox Button */}
+            <button
+                onClick={() => setChatInboxOpen(true)}
+                title="Open Chat Inbox"
+                style={{
+                    position: 'fixed',
+                    top: '1.25rem',
+                    right: '1.25rem',
+                    zIndex: 25000,
+                    padding: '0.75rem 1rem',
+                    borderRadius: '999px',
+                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                    background: 'linear-gradient(135deg, rgba(2,132,199,0.9) 0%, rgba(37,99,235,0.9) 100%)',
+                    color: '#fff',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.45)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                }}
+            >
+                💬 Inbox
+                {conversations.some(c => (c.unread_count || 0) > 0) && (
+                    <span style={{
+                        marginLeft: '0.15rem',
+                        minWidth: '22px',
+                        height: '22px',
+                        padding: '0 7px',
+                        borderRadius: '999px',
+                        background: '#ef4444',
+                        color: '#fff',
+                        fontSize: '0.75rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}>
+                        {conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0)}
+                    </span>
+                )}
+            </button>
+
+            {/* Chat Inbox Modal */}
+            {chatInboxOpen && (
+                <div
+                    onClick={() => setChatInboxOpen(false)}
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(0,0,0,0.6)',
+                        backdropFilter: 'blur(6px)',
+                        zIndex: 24000,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '1rem'
+                    }}
+                >
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            width: '100%',
+                            maxWidth: '520px',
+                            background: '#0f172a',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '1rem',
+                            boxShadow: '0 25px 60px rgba(0,0,0,0.55)',
+                            overflow: 'hidden'
+                        }}
+                    >
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '1rem 1.25rem',
+                            background: 'linear-gradient(90deg, #2563eb 0%, #0284c7 100%)',
+                            color: '#fff'
+                        }}>
+                            <div style={{ fontWeight: 900, letterSpacing: '0.02em' }}>💬 Chat Inbox</div>
+                            <button
+                                onClick={() => setChatInboxOpen(false)}
+                                style={{
+                                    background: 'rgba(255,255,255,0.2)',
+                                    border: 'none',
+                                    color: '#fff',
+                                    width: '34px',
+                                    height: '34px',
+                                    borderRadius: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontSize: '1.1rem'
+                                }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div style={{ padding: '0.75rem', maxHeight: '70vh', overflowY: 'auto' }}>
+                            {conversations.length === 0 ? (
+                                <div style={{ padding: '1.25rem', color: '#94a3b8', textAlign: 'center' }}>
+                                    No conversations yet.
+                                </div>
+                            ) : (
+                                conversations.map((c) => (
+                                    <button
+                                        key={c.id}
+                                        onClick={() => {
+                                            setSelectedChatPatientId(c.patient_id);
+                                            setSelectedChatPatientName(c.patient_username || "Patient");
+                                            setChatInboxOpen(false);
+                                            setChatOpen(true);
+                                        }}
+                                        style={{
+                                            width: '100%',
+                                            textAlign: 'left',
+                                            background: 'rgba(30,41,59,0.55)',
+                                            border: '1px solid rgba(255,255,255,0.06)',
+                                            borderRadius: '0.85rem',
+                                            padding: '0.9rem 1rem',
+                                            marginBottom: '0.65rem',
+                                            cursor: 'pointer',
+                                            color: '#e2e8f0',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '0.75rem'
+                                        }}
+                                    >
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontWeight: 900, color: '#f8fafc' }}>
+                                                {c.patient_username || "Patient"}{" "}
+                                                <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.8rem' }}>
+                                                    (id: {c.patient_id})
+                                                </span>
+                                            </div>
+                                            <div style={{
+                                                color: '#94a3b8',
+                                                fontSize: '0.85rem',
+                                                marginTop: '0.25rem',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                maxWidth: '420px'
+                                            }}>
+                                                {c.last_message || "—"}
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                                            {(c.unread_count || 0) > 0 && (
+                                                <span style={{
+                                                    minWidth: '26px',
+                                                    height: '22px',
+                                                    padding: '0 8px',
+                                                    borderRadius: '999px',
+                                                    background: '#ef4444',
+                                                    color: '#fff',
+                                                    fontWeight: 900,
+                                                    fontSize: '0.75rem',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}>
+                                                    {c.unread_count}
+                                                </span>
+                                            )}
+                                            <span style={{ color: '#38bdf8', fontWeight: 900 }}>Open →</span>
+                                        </div>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {showHistory && (
                 <div className="history-modal-overlay" onClick={() => setShowHistory(false)}>
                     <div className="history-modal" onClick={e => e.stopPropagation()} style={{ background: '#1e293b', width: '100%', maxWidth: '600px', borderRadius: '1.5rem', padding: '2rem', maxHeight: '80vh', overflowY: 'auto', position: 'relative' }}>
@@ -634,6 +903,11 @@ const Dashboard = () => {
                     patient={selectedPatient}
                     onClose={() => setSelectedPatient(null)}
                     onViewHistory={() => fetchHistory(selectedPatient.patientId)}
+                    onOpenChat={(patientUserId, patientName) => {
+                        setSelectedChatPatientId(patientUserId);
+                        setSelectedChatPatientName(patientName);
+                        setChatOpen(true);
+                    }}
                 />
             )}
 
@@ -651,6 +925,14 @@ const Dashboard = () => {
                     onAcknowledge={handleAcknowledge}
                 />
             )}
+
+            {/* Chat Panel */}
+            <ChatPanel
+                recipientId={selectedChatPatientId}
+                recipientName={selectedChatPatientName || "Patient"}
+                isOpen={chatOpen}
+                onClose={() => setChatOpen(false)}
+            />
         </div>
     );
 };

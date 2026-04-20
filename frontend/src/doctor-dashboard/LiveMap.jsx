@@ -93,7 +93,7 @@ const LiveMap = ({ patients: initialPatients, isStandAlone = false }) => {
                 setShouldFly(true);
             }
         }
-    }, [patients]);
+    }, [patients, mapCenter]);
 
     const fetchAddress = async (lat, lon, id) => {
         if (addresses[id]) return;
@@ -135,7 +135,6 @@ const LiveMap = ({ patients: initialPatients, isStandAlone = false }) => {
     }), [patients]);
 
     const criticalPatients = patients.filter(p => p.status === 'RED').slice(0, 3);
-    const recentPatients = [...patients].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5);
 
     const handleMarkerClick = (patient) => {
         setSelectedPatient(patient);

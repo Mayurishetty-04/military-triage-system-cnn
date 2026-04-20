@@ -77,12 +77,13 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not verify_password(data.password, user.hashed_password):
         raise HTTPException(400, "Invalid credentials")
 
-    token = create_access_token({"sub": user.username})
+    token = create_access_token({"sub": user.username, "user_id": user.id})
 
     return {
         "access_token": token,
         "token_type": "bearer",
         "role": user.role,
-        "patientId": user.patientId
+        "patientId": user.patientId,
+        "user_id": user.id
     }
 

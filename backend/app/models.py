@@ -44,3 +44,25 @@ class Patient(Base):
     is_acknowledged = Column(Integer, default=0) # 0 for False, 1 for True (SQLite boolean)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     user = relationship("User")
+
+class Message(Base):
+    __tablename__ = "messages"
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"))
+    sender_id = Column(Integer, ForeignKey("users.id"))
+    content = Column(String)
+    timestamp = Column(DateTime, default=datetime.now)
+    is_read = Column(Integer, default=0)
+    sender = relationship("User")
+    conversation = relationship("Conversation", back_populates="messages")
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("users.id"))
+    doctor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    patient = relationship("User", foreign_keys=[patient_id])
+    doctor = relationship("User", foreign_keys=[doctor_id])
+    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")

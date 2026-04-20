@@ -1,5 +1,6 @@
 import io
 import random
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -7,6 +8,7 @@ from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from reportlab.lib import colors
@@ -882,3 +884,273 @@ def download_report(data: dict):
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=triage_report.pdf"}
     )
+
+# ============================================================
+# CHAT & MESSAGING SYSTEM
+# ============================================================
+
+class MessageCreate(BaseModel):
+    content: str
+    recipient_id: int
+
+class MessageResponse(BaseModel):
+    id: int
+    content: str
+    sender_id: int
+    sender_username: str
+    timestamp: str
+    is_read: int
+
+class ConversationResponse(BaseModel):
+    id: int
+    patient_id: int
+    patient_username: str
+    doctor_id: Optional[int]
+    doctor_username: Optional[str]
+    last_message: Optional[str]
+    updated_at: str
+    unread_count: int
+
+class DoctorUserResponse(BaseModel):
+    id: int
+    username: str
+
+class PatientUserResponse(BaseModel):
+    id: int
+    username: str
+    patientId: Optional[str]
+
+def get_db():
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.get("/users/doctors", response_model=list[DoctorUserResponse])
+def list_doctors(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    default_doctor_username = os.getenv("DEFAULT_DOCTOR_USERNAME", "doc1")
+    doctors = db.query(User).filter(User.role == "doctor").order_by(User.id.asc()).all()
+    doctors_sorted = sorted(
+        doctors,
+        key=lambda d: (0 if d.username == default_doctor_username else 1, d.id),
+    )
+    return [{"id": d.id, "username": d.username} for d in doctors_sorted]
+
+@app.get("/users/patients", response_model=list[PatientUserResponse])
+def list_patients(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Only doctors should view full patient roster
+    if current_user.role != "doctor":
+        raise HTTPException(status_code=403, detail="Only doctors can view patients")
+    patients = db.query(User).filter(User.role == "patient").order_by(User.id.asc()).all()
+    return [{"id": p.id, "username": p.username, "patientId": p.patientId} for p in patients]
+
+@app.post("/messages/merge-to-default-doctor")
+def merge_messages_to_default_doctor(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    For a patient, consolidate any prior conversations with other doctors
+    into the conversation with the default doctor (by username).
+    This prevents "missing history" when switching to the configured default.
+    """
+    if current_user.role != "patient":
+        raise HTTPException(status_code=403, detail="Only patients can merge conversations")
+
+    default_doctor_username = os.getenv("DEFAULT_DOCTOR_USERNAME", "doc1")
+    default_doctor = db.query(User).filter(User.role == "doctor", User.username == default_doctor_username).first()
+    if not default_doctor:
+        raise HTTPException(status_code=404, detail=f"Default doctor '{default_doctor_username}' not found")
+
+    # Ensure target conversation exists
+    target_conv = db.query(models.Conversation).filter(
+        models.Conversation.patient_id == current_user.id,
+        models.Conversation.doctor_id == default_doctor.id,
+    ).first()
+    if not target_conv:
+        target_conv = models.Conversation(patient_id=current_user.id, doctor_id=default_doctor.id)
+        db.add(target_conv)
+        db.commit()
+        db.refresh(target_conv)
+
+    other_convs = db.query(models.Conversation).filter(
+        models.Conversation.patient_id == current_user.id,
+        models.Conversation.doctor_id.isnot(None),
+        models.Conversation.doctor_id != default_doctor.id,
+    ).all()
+
+    moved_messages = 0
+    merged_conversations = 0
+    for conv in other_convs:
+        # Move messages
+        updated = db.query(models.Message).filter(
+            models.Message.conversation_id == conv.id
+        ).update({"conversation_id": target_conv.id})
+        moved_messages += int(updated or 0)
+
+        # Delete old conversation
+        db.delete(conv)
+        merged_conversations += 1
+
+    db.commit()
+
+    return {
+        "target_conversation_id": target_conv.id,
+        "merged_conversations": merged_conversations,
+        "moved_messages": moved_messages,
+        "default_doctor_id": default_doctor.id,
+        "default_doctor_username": default_doctor.username,
+    }
+
+@app.post("/messages/send")
+def send_message(
+    message: MessageCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Send a message to another user"""
+    try:
+        recipient = db.query(User).filter(User.id == message.recipient_id).first()
+        if not recipient:
+            raise HTTPException(status_code=404, detail="Recipient not found")
+
+        # Enforce role-based chat (patient <-> doctor only)
+        if current_user.role == "patient" and recipient.role != "doctor":
+            raise HTTPException(status_code=400, detail="Patients can only message doctors")
+        if current_user.role == "doctor" and recipient.role != "patient":
+            raise HTTPException(status_code=400, detail="Doctors can only message patients")
+
+        # Get or create conversation
+        conv = db.query(models.Conversation).filter(
+            ((models.Conversation.patient_id == current_user.id) & (models.Conversation.doctor_id == message.recipient_id)) |
+            ((models.Conversation.patient_id == message.recipient_id) & (models.Conversation.doctor_id == current_user.id))
+        ).first()
+        
+        if not conv:
+            # Determine who is patient and who is doctor
+            patient_id = current_user.id if current_user.role == "patient" else message.recipient_id
+            doctor_id = message.recipient_id if current_user.role == "patient" else current_user.id
+            
+            conv = models.Conversation(
+                patient_id=patient_id,
+                doctor_id=doctor_id
+            )
+            db.add(conv)
+            db.commit()
+            db.refresh(conv)
+        
+        # Create message
+        msg = models.Message(
+            conversation_id=conv.id,
+            sender_id=current_user.id,
+            content=message.content
+        )
+        db.add(msg)
+        db.commit()
+        db.refresh(msg)
+        
+        return {
+            "id": msg.id,
+            "content": msg.content,
+            "sender_id": msg.sender_id,
+            "sender_username": current_user.username,
+            "timestamp": msg.timestamp.isoformat(),
+            "is_read": msg.is_read
+        }
+    except Exception as e:
+        print(f"Error sending message: {e}")
+        raise HTTPException(500, f"Error sending message: {str(e)}")
+
+@app.get("/messages/conversations")
+def get_conversations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all conversations for current user"""
+    try:
+        conversations = db.query(models.Conversation).filter(
+            (models.Conversation.patient_id == current_user.id) | 
+            (models.Conversation.doctor_id == current_user.id)
+        ).order_by(models.Conversation.updated_at.desc()).all()
+        
+        result = []
+        for conv in conversations:
+            last_msg = db.query(models.Message).filter(
+                models.Message.conversation_id == conv.id
+            ).order_by(models.Message.timestamp.desc()).first()
+            
+            unread = db.query(func.count(models.Message.id)).filter(
+                (models.Message.conversation_id == conv.id) &
+                (models.Message.is_read == 0) &
+                (models.Message.sender_id != current_user.id)
+            ).scalar()
+            
+            patient_user = db.query(User).filter(User.id == conv.patient_id).first()
+            doctor_user = db.query(User).filter(User.id == conv.doctor_id).first() if conv.doctor_id else None
+            
+            result.append({
+                "id": conv.id,
+                "patient_id": conv.patient_id,
+                "patient_username": patient_user.username if patient_user else "Unknown",
+                "doctor_id": conv.doctor_id,
+                "doctor_username": doctor_user.username if doctor_user else None,
+                "last_message": last_msg.content if last_msg else None,
+                "updated_at": conv.updated_at.isoformat(),
+                "unread_count": unread
+            })
+        
+        return result
+    except Exception as e:
+        print(f"Error fetching conversations: {e}")
+        raise HTTPException(500, f"Error fetching conversations: {str(e)}")
+
+@app.get("/messages/conversation/{conversation_id}")
+def get_conversation_messages(
+    conversation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all messages in a conversation"""
+    try:
+        conv = db.query(models.Conversation).filter(models.Conversation.id == conversation_id).first()
+        if not conv:
+            raise HTTPException(404, "Conversation not found")
+        
+        # Check authorization
+        if not ((conv.patient_id == current_user.id) or (conv.doctor_id == current_user.id)):
+            raise HTTPException(403, "Unauthorized")
+        
+        messages = db.query(models.Message).filter(
+            models.Message.conversation_id == conversation_id
+        ).order_by(models.Message.timestamp).all()
+        
+        # Mark as read
+        db.query(models.Message).filter(
+            (models.Message.conversation_id == conversation_id) &
+            (models.Message.is_read == 0) &
+            (models.Message.sender_id != current_user.id)
+        ).update({"is_read": 1})
+        db.commit()
+        
+        return [
+            {
+                "id": msg.id,
+                "content": msg.content,
+                "sender_id": msg.sender_id,
+                "sender_username": msg.sender.username,
+                "timestamp": msg.timestamp.isoformat(),
+                "is_read": msg.is_read
+            }
+            for msg in messages
+        ]
+    except Exception as e:
+        print(f"Error fetching messages: {e}")
+        raise HTTPException(500, f"Error fetching messages: {str(e)}")

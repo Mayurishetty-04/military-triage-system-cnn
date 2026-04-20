@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import ChatPanel from "../components/ChatPanel";
+import useMessageNotifications from "../hooks/useMessageNotifications";
 
 function TriageApp() {
   const navigate = useNavigate();
@@ -17,8 +19,12 @@ function TriageApp() {
   const [liveVitals, setLiveVitals] = useState(null);
   const [currentUsername, setCurrentUsername] = useState("");
   const [currentPatientId, setCurrentPatientId] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [doctorId, setDoctorId] = useState(null);
+  const [doctorName, setDoctorName] = useState("Doctor");
+  const [doctorReady, setDoctorReady] = useState(false);
 
-  // Decode JWT to get logged-in username
+  // Decode JWT to get logged-in username and store user ID
   useEffect(() => {
     const token = localStorage.getItem("token");
     const storedPatientId = localStorage.getItem("patientId");
@@ -31,11 +37,76 @@ function TriageApp() {
       try {
         const payload = JSON.parse(atob(token.split(".")[1]));
         setCurrentUsername(payload.sub || payload.username || "");
+        // Store user ID for chat integration
+        if (payload.user_id) {
+          localStorage.setItem("userId", payload.user_id);
+        }
       } catch (e) {
         // token not decodable, ignore
       }
     }
   }, []);
+
+  // Select an available doctor for chat
+  useEffect(() => {
+    const pickDoctor = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
+        const res = await axios.get(`http://${backendHost}:8000/users/doctors`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          const preferredUsername = "doc1";
+          const preferred = res.data.find((d) => d.username === preferredUsername);
+
+          const savedDoctorIdRaw = localStorage.getItem("preferredDoctorId");
+          const savedDoctorId = savedDoctorIdRaw ? Number(savedDoctorIdRaw) : null;
+          const savedDoctorName = localStorage.getItem("preferredDoctorName");
+          const savedStillExists = savedDoctorId
+            ? res.data.some((d) => Number(d.id) === savedDoctorId)
+            : false;
+
+          // Always prefer the default doctor username when available; otherwise
+          // keep the saved doctor if it still exists; else fall back to first doctor.
+          const chosen =
+            preferred ||
+            (savedStillExists ? res.data.find((d) => Number(d.id) === savedDoctorId) : null) ||
+            res.data[0];
+
+          setDoctorId(chosen.id);
+          setDoctorName(chosen.username || savedDoctorName || "Doctor");
+          localStorage.setItem("preferredDoctorId", String(chosen.id));
+          localStorage.setItem("preferredDoctorName", String(chosen.username || savedDoctorName || "Doctor"));
+          setDoctorReady(true);
+
+          // If we're using the configured default doctor, merge any old threads so history shows up.
+          if (chosen.username === preferredUsername) {
+            try {
+              await axios.post(
+                `http://${backendHost}:8000/messages/merge-to-default-doctor`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+            } catch (e) {
+              // Non-fatal: chat will still work, but old history might remain in older threads.
+            }
+          }
+        } else {
+          setDoctorReady(false);
+        }
+      } catch (e) {
+        // If unavailable, ChatPanel will fall back and show an error on send/fetch.
+        setDoctorReady(false);
+      }
+    };
+    pickDoctor();
+  }, []);
+
+  // Enable message notifications
+  useMessageNotifications();
 
   // Poll for live vitals from Android Bridge
   useEffect(() => {
@@ -264,12 +335,28 @@ function TriageApp() {
 
         {/* Header with Logout Button */}
         <div className="text-center mb-10 animate-fade-in relative">
-          <button
-            onClick={handleLogout}
-            className="absolute top-0 right-0 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 text-sm sm:text-base flex items-center gap-2"
-          >
-            🚪 Logout
-          </button>
+          <div className="absolute top-0 right-0 flex gap-2">
+            <button
+              onClick={() => {
+                if (!doctorId) {
+                  alert("No doctor is available for chat yet. Please register/login a doctor account and refresh.");
+                  return;
+                }
+                setChatOpen(true);
+              }}
+              className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 text-sm sm:text-base flex items-center gap-2"
+              title="Open Chat with Doctor"
+              disabled={!doctorReady}
+            >
+              💬 Chat
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 text-sm sm:text-base flex items-center gap-2"
+            >
+              🚪 Logout
+            </button>
+          </div>
           <div className="inline-block mb-4 text-6xl sm:text-7xl drop-shadow-lg">🪖</div>
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 mb-2">
             Military Triage System
@@ -636,6 +723,14 @@ function TriageApp() {
           )}
         </div>
       </div>
+
+      {/* Chat Panel */}
+      <ChatPanel
+        recipientId={doctorId}
+        recipientName={doctorName}
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+      />
     </div>
   );
 }

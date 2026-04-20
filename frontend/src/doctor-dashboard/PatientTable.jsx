@@ -1,6 +1,9 @@
 import React from 'react';
 
 const getSurvivalDetails = (status, survivalProb) => {
+    if (!status || status === 'NONE') {
+        return { chance: "—", label: "No triage submitted" };
+    }
     const conf = (survivalProb || 0) / 100;
     let chance = 0;
     let label = "";
@@ -44,6 +47,7 @@ const PatientTable = ({ patients, onSelectPatient }) => {
                 <tbody>
                     {patients.map((patient) => {
                         const { chance, label } = getSurvivalDetails(patient.status, patient.survivalProbability);
+                        const statusText = patient.status === 'NONE' ? 'NO TRIAGE' : patient.status;
                         return (
                             <tr key={patient.patientId} onClick={() => onSelectPatient(patient)}>
                                 <td>
@@ -57,7 +61,7 @@ const PatientTable = ({ patients, onSelectPatient }) => {
                                 <td>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <span className={`status-badge status-${patient.status}`}>
-                                            {patient.status}
+                                            {statusText}
                                         </span>
                                         <span style={{ fontSize: '0.65rem', color: '#94a3b8', marginLeft: '4px' }}>{label}</span>
                                     </div>
@@ -65,8 +69,8 @@ const PatientTable = ({ patients, onSelectPatient }) => {
                                 <td style={{ fontWeight: 'bold', color: patient.status === 'GREEN' ? '#10b981' : '#fff' }}>
                                     {chance}
                                 </td>
-                                <td className="priority-cell">{patient.priority}</td>
-                                <td>{new Date(patient.timestamp).toLocaleString()}</td>
+                                <td className="priority-cell">{patient.priority ?? "—"}</td>
+                                <td>{patient.timestamp ? new Date(patient.timestamp).toLocaleString() : "—"}</td>
                             </tr>
                         );
                     })}

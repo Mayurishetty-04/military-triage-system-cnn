@@ -28,7 +28,7 @@ const getSurvivalDetails = (status, survivalProb) => {
     return { chance: `${chance.toFixed(1)}%`, label };
 };
 
-const PatientDetails = ({ patient, onClose, onViewHistory }) => {
+const PatientDetails = ({ patient, onClose, onViewHistory, onOpenChat }) => {
     if (!patient) return null;
     const { chance, label: survivalLabel } = getSurvivalDetails(patient.status, patient.survivalProbability);
 
@@ -147,29 +147,52 @@ const PatientDetails = ({ patient, onClose, onViewHistory }) => {
                     </div>
 
                     {/* Action Footer */}
-                    <button
-                        className="history-btn"
-                        onClick={onViewHistory}
-                        style={{ 
-                            width: '100%', 
-                            padding: '1.25rem', 
-                            background: 'transparent',
-                            border: '1px dashed rgba(255,255,255,0.2)',
-                            borderRadius: '1rem',
-                            color: '#cbd5e1',
-                            fontWeight: 700,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.75rem',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                        }}
-                        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = theme.color; e.currentTarget.style.color = '#fff'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#cbd5e1'; }}
-                    >
-                        📜 Retrieve Comprehensive Clinical History
-                    </button>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <button
+                            className="history-btn"
+                            onClick={() => onOpenChat && onOpenChat(patient.user_id, patient.patientName)}
+                            style={{ 
+                                padding: '1.25rem', 
+                                background: 'linear-gradient(135deg, #0369a1 0%, #0284c7 100%)',
+                                border: 'none',
+                                borderRadius: '1rem',
+                                color: '#fff',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.75rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 0 20px rgba(3, 105, 161, 0.5)'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        >
+                            💬 Open Chat
+                        </button>
+                        <button
+                            className="history-btn"
+                            onClick={onViewHistory}
+                            style={{ 
+                                padding: '1.25rem', 
+                                background: 'transparent',
+                                border: '1px dashed rgba(255,255,255,0.2)',
+                                borderRadius: '1rem',
+                                color: '#cbd5e1',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.75rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = theme.color; e.currentTarget.style.color = '#fff'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = '#cbd5e1'; }}
+                        >
+                            📜 History
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
