@@ -41,6 +41,7 @@ class Patient(Base):
     explanation = Column(String, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    image_path = Column(String, nullable=True)
     is_acknowledged = Column(Integer, default=0) # 0 for False, 1 for True (SQLite boolean)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     user = relationship("User")

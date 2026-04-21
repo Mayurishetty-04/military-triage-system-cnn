@@ -7,6 +7,8 @@ from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+import shutil
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -87,6 +89,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+UPLOAD_DIR = "uploads"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # ---- GLOBAL STATE FOR LIVE VITALS ----
@@ -194,7 +202,7 @@ def get_patients(db = Depends(get_db)):
         subquery,
         (models.Patient.patientId == subquery.c.patientId) &
         (models.Patient.timestamp == subquery.c.max_time)
-    ).order_by(models.Patient.priority.asc()).all()
+    ).order_by(models.Patient.priority.asc(), models.Patient.survivalProbability.asc()).all()
     
     return patients
 
@@ -494,9 +502,24 @@ async def predict(
 
     # ---------------- IMAGE ----------------
     visual_raw = None
+    image_path = None
     if image:
-        img_bytes = await image.read()
-        visual_raw = predict_visual(img_bytes)
+        file_extension = os.path.splitext(image.filename)[1]
+        if not file_extension:
+            file_extension = ".jpg"
+        filename = f"img_{int(datetime.now().timestamp())}_{random.randint(1000, 9999)}{file_extension}"
+        filepath = os.path.join(UPLOAD_DIR, filename)
+        
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        
+        image_path = f"/uploads/{filename}"
+        
+        # Reset file pointer for predict_visual if needed (but we already read it)
+        # Actually image.file was copied, so we need to read from filepath or buffer
+        with open(filepath, "rb") as f:
+            img_bytes = f.read()
+            visual_raw = predict_visual(img_bytes)
         modalities_used.append("image")
 
     # ---------------- AUDIO ----------------
@@ -585,6 +608,7 @@ async def predict(
             priority=priority_map.get(final_label.upper(), 4),
             latitude=latitude,
             longitude=longitude,
+            image_path=image_path,
             user_id=current_user.id if current_user and current_user.role == "patient" else None
         )
         db.add(db_patient)
