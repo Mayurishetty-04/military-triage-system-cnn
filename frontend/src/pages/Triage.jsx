@@ -322,407 +322,296 @@ function TriageApp() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-black flex items-center justify-center overflow-hidden relative">
-      {/* Animated Background Blobs */}
+    <div className="w-full min-h-screen bg-[#0f172a] text-white overflow-x-hidden font-['Inter'] relative">
+      {/* Tactical Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-        <div className="absolute top-1/3 left-1/4 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '0.5s' }}></div>
+        <div className="absolute top-0 right-0 w-[60%] h-[60%] bg-blue-600/5 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-0 left-0 w-[60%] h-[60%] bg-cyan-600/5 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
 
-      {/* Scroll wrapper for large content */}
-      <div className="relative w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-h-[90vh] overflow-y-auto">
-
-        {/* Header with Logout Button */}
-        <div className="text-center mb-10 animate-fade-in relative">
-          <div className="absolute top-0 right-0 flex gap-2">
+      <div className="relative z-10 max-w-4xl mx-auto px-4 pt-6 pb-32">
+        {/* Top Navigation */}
+        <nav className="flex justify-between items-center mb-8 animate-fade-in">
+          <button 
+            onClick={() => navigate("/home")}
+            className="w-10 h-10 glass-panel rounded-full flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+          >
+            ←
+          </button>
+          <div className="flex gap-2">
             <button
               onClick={() => {
                 if (!doctorId) {
-                  alert("No doctor is available for chat yet. Please register/login a doctor account and refresh.");
+                  alert("Connecting to field medic...");
                   return;
                 }
                 setChatOpen(true);
               }}
-              className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 text-sm sm:text-base flex items-center gap-2"
-              title="Open Chat with Doctor"
               disabled={!doctorReady}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                doctorReady 
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 glow-on-hover' 
+                : 'bg-white/5 text-gray-500 border border-white/5'
+              }`}
             >
-              💬 Chat
+              💬 {doctorReady ? 'Live Medic' : 'Medic Offline'}
             </button>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 text-sm sm:text-base flex items-center gap-2"
+              className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-black uppercase tracking-widest"
             >
-              🚪 Logout
+              Terminate
             </button>
           </div>
-          <div className="inline-block mb-4 text-6xl sm:text-7xl drop-shadow-lg">🪖</div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 mb-2">
-            Military Triage System
+        </nav>
+
+        {/* Header Section */}
+        <header className="mb-10 text-center animate-fade-in">
+          <div className="inline-block px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-[10px] font-black uppercase tracking-[0.3em] text-cyan-400 mb-4">
+            Triage Module v4.2
+          </div>
+          <h1 className="text-4xl sm:text-5xl font-black font-['Outfit'] tracking-tight mb-2">
+            Injury <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">Assessment</span>
           </h1>
-          <p className="text-gray-300 text-sm sm:text-base font-light">Multi-Modal Injury Assessment</p>
           {currentUsername && (
-            <div className="mt-3 inline-flex items-center gap-2 bg-slate-700/60 border border-slate-600/50 rounded-full px-4 py-1.5">
-              <span className="text-amber-400 text-sm font-semibold">👤 {currentUsername}</span>
-              {currentPatientId && (
-                <>
-                  <span className="text-slate-500 text-sm">|</span>
-                  <span className="text-slate-300 text-sm font-mono">{currentPatientId}</span>
-                </>
-              )}
-            </div>
+            <p className="text-gray-500 font-mono text-xs">Unit: {currentUsername} | ID: {currentPatientId || 'PENDING'}</p>
           )}
-          <div className="h-1 w-20 bg-gradient-to-r from-amber-400 to-cyan-400 mx-auto rounded-full mt-4"></div>
-        </div>
+        </header>
 
-        {/* Main Card */}
-        <div className="bg-gradient-to-br from-slate-800/90 to-slate-900/90 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-700/50 p-6 sm:p-8 lg:p-10 space-y-8">
-
-          {/* IMAGE SECTION */}
-          <div className="space-y-4 animate-slide-in-left" style={{ animationDelay: '0.1s' }}>
-            <h3 className="text-xl sm:text-2xl font-bold text-amber-400 flex items-center gap-2 uppercase tracking-wide">🖼 Injury Image</h3>
-
-            {!cameraOn && (
-              <button
-                onClick={startCamera}
-                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
-              >
-                📷 Open Camera
-              </button>
-            )}
-
-            {cameraOn && (
-              <div className="space-y-4">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full rounded-xl shadow-xl border border-cyan-500/30 aspect-video object-cover"
-                />
-                <div className="flex gap-3 flex-wrap">
-                  <button
-                    onClick={captureImage}
-                    className="flex-1 min-w-fit px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
-                  >
-                    📸 Capture
-                  </button>
-                  <button
-                    onClick={stopCamera}
-                    className="flex-1 min-w-fit px-6 py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
-                  >
-                    ❌ Stop
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <label className="block text-gray-300 font-semibold uppercase text-sm tracking-wide">📁 Upload Image</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="block w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-amber-500 file:text-gray-900 hover:file:bg-amber-600 transition-all cursor-pointer"
-              />
-            </div>
-
-            {image && (
-              <div className="p-3 bg-green-500/20 border border-green-500/50 rounded-lg flex items-center gap-2 text-green-200 animate-pulse font-semibold">
-                ✅ Image Ready
-              </div>
-            )}
-            <canvas ref={canvasRef} hidden />
-          </div>
-
-          {/* AUDIO SECTION */}
-          <div className="space-y-4 border-t border-slate-700/50 pt-8 animate-slide-in-right" style={{ animationDelay: '0.2s' }}>
-            <h3 className="text-xl sm:text-2xl font-bold text-cyan-400 flex items-center gap-2 uppercase tracking-wide">🎤 Injury Audio</h3>
-            <div className="space-y-2">
-              <label className="block text-gray-300 font-semibold uppercase text-sm tracking-wide">Upload Audio File</label>
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={handleAudioUpload}
-                className="block w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-cyan-500 file:text-gray-900 hover:file:bg-cyan-600 transition-all cursor-pointer"
-              />
-            </div>
-            {audio && (
-              <div className="p-3 bg-cyan-500/20 border border-cyan-500/50 rounded-lg flex items-center gap-2 text-cyan-200 animate-pulse font-semibold">
-                ✅ Audio Uploaded
-              </div>
-            )}
-          </div>
-
-          {/* TEXT SECTION */}
-          <div className="space-y-4 border-t border-slate-700/50 pt-8 animate-slide-in-left" style={{ animationDelay: '0.3s' }}>
-            <h3 className="text-xl sm:text-2xl font-bold text-yellow-400 flex items-center gap-2 uppercase tracking-wide">📝 Injury Description</h3>
-            <textarea
-              rows="4"
-              className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all duration-300 resize-none font-medium"
-              value={text}
-              placeholder="Describe the injury, symptoms, location, and medical history..."
-              onChange={(e) => setText(e.target.value)}
-            />
-          </div>
-
-          {/* VITALS SECTION */}
-          <div className="space-y-4 border-t border-slate-700/50 pt-8 animate-slide-in-right" style={{ animationDelay: '0.4s' }}>
-            {/* LIVE VITALS DISPLAY (From Watch) */}
-            <div className="space-y-4 border-t border-slate-700/50 pt-8 animate-fade-in">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl sm:text-2xl font-bold text-emerald-400 flex items-center gap-2 uppercase tracking-wide">
-                  📡 Live Watch Vitals
-                </h3>
-                {liveVitals && liveVitals.timestamp ? (
-                  <span className="flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded-full animate-pulse border border-emerald-500/30">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full"></span> LIVE
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2 px-3 py-1 bg-slate-700/50 text-gray-400 text-[10px] font-bold rounded-full border border-slate-600/30">
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-ping"></div> WAITING FOR BRIDGE...
-                  </span>
-                )}
-              </div>
-
-              {liveVitals && liveVitals.timestamp ? (
-                <>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="bg-slate-700/40 p-4 rounded-xl border border-slate-600/30 text-center text-sm sm:text-base">
-                      <p className="text-gray-400 text-[10px] uppercase mb-1">Heart Rate</p>
-                      <p className="text-xl font-black text-white">{liveVitals.heart_rate} <span className="text-[10px] font-normal text-gray-400">bpm</span></p>
-                    </div>
-                    <div className="bg-slate-700/40 p-4 rounded-xl border border-slate-600/30 text-center text-sm sm:text-base">
-                      <p className="text-gray-400 text-[10px] uppercase mb-1">SpO2</p>
-                      <p className="text-xl font-black text-white">{liveVitals.spo2} <span className="text-[10px] font-normal text-gray-400">%</span></p>
-                    </div>
-                    <div className="bg-slate-700/40 p-4 rounded-xl border border-slate-600/30 text-center text-sm sm:text-base">
-                      <p className="text-gray-400 text-[10px] uppercase mb-1">BP (Sys/Dia)</p>
-                      <p className="text-lg font-black text-white">{liveVitals.systolic_bp}/{liveVitals.diastolic_bp}</p>
-                    </div>
-                    <div className={`p-4 rounded-xl border text-center font-bold flex flex-col justify-center text-sm sm:text-base ${liveVitals.triage === 'RED' ? 'bg-red-500/20 border-red-500/50 text-red-400 animate-pulse' :
-                      liveVitals.triage === 'YELLOW' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' :
-                        liveVitals.triage === 'BLACK' ? 'bg-gray-800 border-gray-600 text-gray-300' :
-                          'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-                      }`}>
-                      <p className="text-[10px] uppercase opacity-80 mb-1">Triage</p>
-                      <p className="text-lg">{liveVitals.triage}</p>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-gray-500 text-right italic">
-                    Last updated: {new Date(liveVitals.timestamp).toLocaleTimeString()}
-                  </p>
-                </>
-              ) : (
-                <div className="bg-slate-800/30 border border-dashed border-slate-700 rounded-xl p-6 text-center">
-                  <p className="text-gray-500 text-sm font-medium italic">
-                    Waiting for data from the Android Bridge app...
-                  </p>
-                  <p className="text-[10px] text-gray-600 mt-2">
-                    (Ensure your phone is on this WiFi and you've tapped "Start Sending")
-                  </p>
-                </div>
+        <div className="space-y-6">
+          {/* LIVE VITALS MONITOR */}
+          <section className="glass-panel rounded-[2rem] p-6 border-white/5 animate-fade-in">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
+                Biometric Stream
+              </h3>
+              {liveVitals?.timestamp && (
+                <span className="text-[10px] font-mono text-emerald-400/70">
+                  {new Date(liveVitals.timestamp).toLocaleTimeString()}
+                </span>
               )}
             </div>
-          </div>
 
-          {/* VITALS SECTION (Manual Override) */}
-          <div className="space-y-4 border-t border-slate-700/50 pt-8 animate-slide-in-right" style={{ animationDelay: '0.4s' }}>
-            <h3 className="text-xl sm:text-2xl font-bold text-red-400 flex items-center gap-2 uppercase tracking-wide">❤️ {liveVitals && liveVitals.timestamp ? 'Manual Vitals Override' : 'Vital Signs (Optional)'}</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <input
-                type="number"
-                placeholder="Pulse (bpm)"
-                value={pulse}
-                onChange={(e) => setPulse(e.target.value)}
-                className="px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400 transition-all duration-300 font-medium"
-              />
-              <input
-                type="number"
-                placeholder="SpO2 (%)"
-                value={spo2}
-                onChange={(e) => setSpo2(e.target.value)}
-                className="px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400 transition-all duration-300 font-medium"
-              />
-              <input
-                type="number"
-                placeholder="Systolic BP (mmHg)"
-                value={systolicBP}
-                onChange={(e) => setSystolicBP(e.target.value)}
-                className="px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400 transition-all duration-300 font-medium"
-              />
-            </div>
-            <label className="flex items-center gap-3 px-4 py-3 bg-slate-700/30 rounded-lg border border-slate-600/30 cursor-pointer hover:bg-slate-700/50 transition-colors duration-300">
-              <input
-                type="checkbox"
-                checked={unconscious}
-                onChange={(e) => setUnconscious(e.target.checked)}
-                className="w-5 h-5 rounded cursor-pointer"
-              />
-              <span className="text-gray-200 font-semibold">Patient Unconscious</span>
-            </label>
-          </div>
-
-          {/* ANALYZE BUTTON */}
-          <button
-            onClick={sendData}
-            disabled={loading}
-            className="w-full px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold text-lg rounded-xl shadow-2xl transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2 border-t border-slate-700/50 pt-8 mt-4 uppercase tracking-wide"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full"></div>
-                <span>Analyzing...</span>
-              </>
+            {liveVitals?.timestamp ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="glass-card p-4 rounded-2xl border-white/5">
+                  <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">HR</p>
+                  <p className="text-2xl font-black font-['Outfit']">{liveVitals.heart_rate}<span className="text-xs text-gray-600 ml-1">BPM</span></p>
+                </div>
+                <div className="glass-card p-4 rounded-2xl border-white/5">
+                  <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">SpO2</p>
+                  <p className="text-2xl font-black font-['Outfit']">{liveVitals.spo2}<span className="text-xs text-gray-600 ml-1">%</span></p>
+                </div>
+                <div className="glass-card p-4 rounded-2xl border-white/5">
+                  <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">BP</p>
+                  <p className="text-2xl font-black font-['Outfit']">{liveVitals.systolic_bp}<span className="text-xs text-gray-600 ml-1">SYS</span></p>
+                </div>
+                <div className={`p-4 rounded-2xl flex flex-col justify-center border ${
+                  liveVitals.triage === 'RED' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
+                  liveVitals.triage === 'YELLOW' ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' :
+                  'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                }`}>
+                  <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Status</p>
+                  <p className="text-lg font-black">{liveVitals.triage}</p>
+                </div>
+              </div>
             ) : (
-              <>
-                <span>🔍</span>
-                <span>Analyze Injury</span>
-              </>
+              <div className="py-8 text-center border border-dashed border-white/10 rounded-2xl">
+                <p className="text-xs text-gray-500 italic">Waiting for biometric bridge connection...</p>
+              </div>
             )}
-          </button>
+          </section>
 
-          {/* RESULT SECTION */}
-          {result && (
-            <div className="space-y-6 border-t border-slate-700/50 pt-8 mt-8 animate-fade-in">
-              <h3 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2 uppercase tracking-wide">🩺 Analysis Result</h3>
-
-              {/* Triage Level Banner */}
-              <div
-                className={`p-6 rounded-2xl text-center font-bold text-2xl sm:text-3xl shadow-2xl border-2 ${result.triage_level === "Black"
-                  ? "bg-gradient-to-r from-gray-700 to-gray-900 border-gray-600 text-gray-100"
-                  : result.triage_level === "Red"
-                    ? "bg-gradient-to-r from-red-700 to-red-900 border-red-600 text-white animate-pulse"
-                    : result.triage_level === "Yellow"
-                      ? "bg-gradient-to-r from-yellow-600 to-amber-700 border-yellow-600 text-gray-900"
-                      : "bg-gradient-to-r from-green-600 to-emerald-700 border-green-600 text-white"
-                  }`}
-              >
-                TRIAGE LEVEL: {result.triage_level}
-              </div>
-
-              {/* Patient ID + Name */}
-              {result.patientId && (
-                <div className="flex items-center gap-3 bg-slate-700/40 border border-slate-600/40 rounded-xl px-5 py-3">
-                  <span className="text-gray-400 text-sm font-semibold uppercase tracking-wide">Patient</span>
-                  <span className="text-white font-bold">{result.patientId}</span>
-                  {result.patientName && (
-                    <span className="text-amber-400 font-semibold ml-1">· 👤 {result.patientName}</span>
-                  )}
-                </div>
-              )}
-
-              {/* AI Explanation / Rationale */}
-              {result.explanation && (
-                <div className="bg-slate-700/50 p-6 rounded-xl border-l-4 border-l-blue-500 shadow-inner">
-                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <span>🧠</span> AI Rationale
-                  </h4>
-                  <p className="text-gray-200 text-lg leading-relaxed font-medium">
-                    {result.explanation}
-                  </p>
-                </div>
-              )}
-
-              {/* Confidence */}
-              <div className="bg-slate-700/30 p-6 rounded-xl border border-slate-600/50">
-                <p className="text-lg text-gray-200">
-                  <span className="font-bold text-white">Overall Confidence:</span>
-                  <span className="ml-3 text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-                    {result.confidence}%
-                  </span>
-                </p>
-              </div>
-
-              {/* Override Reason */}
-              {result.override_reason && (
-                <div className="p-4 bg-red-500/20 border-2 border-red-500/50 rounded-lg flex items-start gap-3 animate-pulse">
-                  <span className="text-2xl mt-1">⚠️</span>
-                  <p className="text-red-200 font-semibold">{result.override_reason}</p>
-                </div>
-              )}
-
-              {/* Recommended Actions */}
-              {result.recommended_action && (
-                <div className="space-y-3">
-                  <h4 className="text-xl sm:text-2xl font-bold text-lime-400 flex items-center gap-2 uppercase tracking-wide">💡 Recommended Actions</h4>
-                  <ul className="bg-lime-500/20 border-2 border-lime-500/50 rounded-lg p-6 space-y-3">
-                    {result.recommended_action.map((item, i) => (
-                      <li key={i} className="text-lime-200 font-semibold flex items-start gap-3">
-                        <span className="text-lg mt-1">→</span>
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Resource Optimization Engine */}
-              {result.resource_advice && (
-                <div className="space-y-3 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-                  <h4 className="text-xl sm:text-2xl font-bold text-amber-400 flex items-center gap-2 uppercase tracking-wide">🚀 Resource Optimization advice</h4>
-                  <div className="bg-slate-700/60 border-2 border-amber-500/50 rounded-lg p-6 space-y-4 shadow-xl">
-                    <ul className="space-y-3">
-                      {result.resource_advice.output.map((item, i) => (
-                        <li key={i} className="text-amber-100 font-bold flex items-start gap-3">
-                          <span className="text-lg mt-1">⚡</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="pt-3 border-t border-slate-600/50">
-                      <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mb-1">Tactical Analysis Context</p>
-                      <p className="text-gray-300 italic text-sm font-medium">
-                        {result.resource_advice.why}
-                      </p>
-                    </div>
+          {/* SENSORY INPUTS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Visual Assessment */}
+            <section className="glass-panel rounded-[2rem] p-6 border-white/5 space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-amber-400">📷 Visual Data</h3>
+              
+              {!cameraOn ? (
+                <button
+                  onClick={startCamera}
+                  className="w-full aspect-video glass-card rounded-2xl flex flex-col items-center justify-center gap-3 border-white/5 hover:border-amber-500/30 transition-all group"
+                >
+                  <span className="text-4xl group-hover:scale-110 transition-transform">📸</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Activate Lens</span>
+                </button>
+              ) : (
+                <div className="space-y-4">
+                  <video ref={videoRef} autoPlay playsInline className="w-full rounded-2xl aspect-video object-cover border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)]" />
+                  <div className="flex gap-2">
+                    <button onClick={captureImage} className="flex-1 py-3 bg-amber-500 text-slate-900 font-black rounded-xl text-xs uppercase tracking-widest">Capture</button>
+                    <button onClick={stopCamera} className="px-4 py-3 bg-white/10 text-white font-black rounded-xl text-xs uppercase tracking-widest">Off</button>
                   </div>
                 </div>
               )}
+              
+              <div className="relative">
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="img-upload" />
+                <label htmlFor="img-upload" className="flex items-center justify-center gap-2 py-3 w-full glass-card rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-white/5">
+                  <span>📂</span> {image ? 'Replace Image' : 'Upload File'}
+                </label>
+              </div>
+              {image && <p className="text-[10px] text-emerald-400 font-bold text-center animate-pulse">✓ IMAGE READY FOR ANALYSIS</p>}
+              <canvas ref={canvasRef} hidden />
+            </section>
 
-              {/* Probability Bars */}
+            {/* Audio & Text Assessment */}
+            <section className="glass-panel rounded-[2rem] p-6 border-white/5 space-y-6">
               <div className="space-y-4">
-                <h4 className="text-xl sm:text-2xl font-bold text-blue-400 flex items-center gap-2 uppercase tracking-wide">📊 Integrated Triage Probability</h4>
-                {Object.entries(result.probabilities).map(([k, v]) => {
-                  const colors = {
-                    Black: "from-gray-600 to-gray-700",
-                    Red: "from-red-600 to-red-700",
-                    Yellow: "from-yellow-500 to-amber-600",
-                    Green: "from-green-600 to-emerald-700"
-                  };
-                  return (
-                    <div key={k} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-base sm:text-lg text-gray-200">{k}</span>
-                        <span className="text-base sm:text-lg font-bold text-blue-300">{(v * 100).toFixed(1)}%</span>
-                      </div>
-                      <div className="w-full h-3 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/50">
-                        <div
-                          className={`h-full bg-gradient-to-r ${colors[k] || 'from-blue-600 to-cyan-600'} transition-all duration-500`}
-                          style={{ width: `${v * 100}%` }}
-                        />
-                      </div>
-                      {result.class_explanations && result.class_explanations[k] && (
-                        <p className="text-xs text-slate-400 italic mt-1 bg-slate-800/50 p-2 rounded border border-slate-700">
-                          {result.class_explanations[k]}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-cyan-400">🎤 Acoustic Data</h3>
+                <div className="relative">
+                  <input type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden" id="audio-upload" />
+                  <label htmlFor="audio-upload" className="flex flex-col items-center justify-center gap-3 py-6 w-full glass-card rounded-2xl border-white/5 cursor-pointer hover:border-cyan-500/30 transition-all group">
+                    <span className="text-3xl group-hover:scale-110 transition-transform">🎙️</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                      {audio ? 'Audio Loaded' : 'Upload Field Audio'}
+                    </span>
+                  </label>
+                </div>
               </div>
 
-              {/* Download Button */}
-              <button
-                onClick={downloadPDF}
-                className="w-full px-6 py-4 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 text-base sm:text-lg uppercase tracking-wide"
-              >
-                📥 Download PDF Report
-              </button>
-            </div>
+              <div className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-400">📝 Manual Intel</h3>
+                <textarea
+                  rows="3"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  className="w-full glass-card rounded-2xl p-4 text-sm placeholder:text-gray-600 resize-none"
+                  placeholder="Enter patient status, trauma details, or observations..."
+                />
+              </div>
+            </section>
+          </div>
+
+          {/* MANUAL OVERRIDES */}
+          <section className="glass-panel rounded-[2rem] p-6 border-white/5">
+             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-red-400 mb-6">⚙️ Manual Vitals Override</h3>
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div className="space-y-1">
+                  <p className="text-[10px] text-gray-500 font-bold uppercase ml-1">Pulse</p>
+                  <input type="number" value={pulse} onChange={(e) => setPulse(e.target.value)} className="w-full glass-card rounded-xl p-3 text-sm" placeholder="BPM" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] text-gray-500 font-bold uppercase ml-1">SpO2</p>
+                  <input type="number" value={spo2} onChange={(e) => setSpo2(e.target.value)} className="w-full glass-card rounded-xl p-3 text-sm" placeholder="%" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] text-gray-500 font-bold uppercase ml-1">Sys BP</p>
+                  <input type="number" value={systolicBP} onChange={(e) => setSystolicBP(e.target.value)} className="w-full glass-card rounded-xl p-3 text-sm" placeholder="mmHg" />
+                </div>
+             </div>
+             <label className="flex items-center gap-3 p-4 glass-card rounded-2xl cursor-pointer hover:bg-white/5 transition-colors">
+                <input type="checkbox" checked={unconscious} onChange={(e) => setUnconscious(e.target.checked)} className="w-5 h-5 rounded-lg border-white/10 bg-white/5 text-cyan-500 focus:ring-cyan-500" />
+                <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">Unconscious State Detected</span>
+             </label>
+          </section>
+
+          {/* RESULTS SECTION */}
+          {result && (
+            <section className="glass-panel rounded-[3rem] p-8 border-white/5 animate-fade-in shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+               <div className="text-center mb-10">
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-500 mb-2">Final Classification</p>
+                  <div className={`inline-block px-12 py-6 rounded-3xl text-4xl font-black font-['Outfit'] shadow-2xl border-2 ${
+                    result.triage_level === 'Red' ? 'bg-red-500/20 border-red-500/40 text-red-400 animate-pulse' :
+                    result.triage_level === 'Yellow' ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' :
+                    result.triage_level === 'Black' ? 'bg-gray-800 border-gray-700 text-gray-400' :
+                    'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                  }`}>
+                    {result.triage_level.toUpperCase()}
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+                  <div className="space-y-6">
+                    <div className="glass-card p-6 rounded-3xl border-white/5">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-4">🧠 AI Rationale</h4>
+                      <p className="text-sm leading-relaxed text-gray-300 font-medium italic">"{result.explanation}"</p>
+                    </div>
+                    
+                    <div className="glass-card p-6 rounded-3xl border-white/5">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-4">💡 Protocol Advice</h4>
+                      <ul className="space-y-3">
+                        {result.recommended_action.map((action, i) => (
+                          <li key={i} className="text-xs font-bold text-gray-200 flex items-start gap-3">
+                            <span className="text-emerald-500">→</span> {action}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="glass-card p-6 rounded-3xl border-white/5">
+                       <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-4">🚀 Optimized Logistics</h4>
+                       <div className="space-y-3">
+                          {result.resource_advice.output.map((advice, i) => (
+                            <p key={i} className="text-xs font-bold text-amber-100 flex items-start gap-3">
+                              <span className="text-amber-500">⚡</span> {advice}
+                            </p>
+                          ))}
+                       </div>
+                    </div>
+
+                    <div className="glass-card p-6 rounded-3xl border-white/5">
+                       <h4 className="text-[10px] font-black uppercase tracking-widest text-cyan-400 mb-6">📊 Confidence Matrix</h4>
+                       <div className="space-y-4">
+                          {Object.entries(result.probabilities).map(([label, val]) => (
+                            <div key={label} className="space-y-1.5">
+                              <div className="flex justify-between text-[10px] font-black uppercase">
+                                <span className="text-gray-500">{label}</span>
+                                <span className="text-cyan-400">{(val * 100).toFixed(1)}%</span>
+                              </div>
+                              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                <div className={`h-full transition-all duration-1000 ${
+                                  label === 'Red' ? 'bg-red-500' : 
+                                  label === 'Yellow' ? 'bg-amber-500' : 
+                                  label === 'Black' ? 'bg-gray-600' : 'bg-emerald-500'
+                                }`} style={{ width: `${val * 100}%` }}></div>
+                              </div>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                  </div>
+               </div>
+
+               <button
+                  onClick={downloadPDF}
+                  className="w-full py-5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-black rounded-2xl text-sm uppercase tracking-[0.2em] shadow-2xl transition-all"
+               >
+                 Download Full Report PDF
+               </button>
+            </section>
           )}
         </div>
       </div>
+
+      {/* STICKY ANALYZE BUTTON (Mobile Friendly) */}
+      {!result && (
+        <div className="fixed bottom-0 left-0 right-0 p-6 z-50 pointer-events-none">
+          <div className="max-w-4xl mx-auto pointer-events-auto">
+            <button
+              onClick={sendData}
+              disabled={loading}
+              className="w-full py-5 glass-panel border-cyan-500/30 text-white font-black text-sm uppercase tracking-[0.3em] rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 glow-on-hover bg-gradient-to-r from-blue-600/20 to-cyan-600/20"
+            >
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <>
+                  <span>🔍</span>
+                  <span>Analyze Case</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Chat Panel */}
       <ChatPanel

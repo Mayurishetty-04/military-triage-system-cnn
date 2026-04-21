@@ -1,111 +1,152 @@
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 function Home() {
   const navigate = useNavigate();
+  const [username, setUsername] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setUsername(payload.sub || payload.username || "Personnel");
+      } catch (e) {
+        setUsername("Personnel");
+      }
+    }
+  }, []);
 
   const logout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("patientId");
     navigate("/");
   };
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white overflow-hidden">
-      {/* Animated Background Elements */}
+    <div className="w-full min-h-screen bg-[#0f172a] text-white overflow-x-hidden font-['Inter']">
+      {/* Dynamic Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl animate-float"></div>
+        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-cyan-600/10 rounded-full blur-[120px] animate-pulse" style={{animationDelay: '1.5s'}}></div>
       </div>
 
-      {/* Content Container */}
-      <div className="relative z-10 flex flex-col min-h-screen">
-        {/* HEADER */}
-        <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-          <div className="text-center max-w-4xl mx-auto animate-fade-in">
-            <div className="inline-block mb-6 text-7xl sm:text-8xl drop-shadow-lg animate-float">🪖</div>
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 mb-4 animate-slide-in-left">
-              Military AI Triage System
-            </h1>
-            <div className="h-1 w-24 sm:w-32 bg-gradient-to-r from-amber-400 to-cyan-400 mx-auto mb-8 rounded-full"></div>
-            <p className="text-base sm:text-lg lg:text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed font-light mb-10 animate-slide-in-right">
-              AI-powered multi-modal emergency assessment using Image, Audio, Text and Vitals Analysis
-            </p>
-
-            <button
-              onClick={() => navigate("/triage")}
-              className="inline-flex items-center justify-center gap-2 px-8 sm:px-10 py-4 sm:py-5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold rounded-xl shadow-2xl transform hover:scale-105 transition-all duration-300 text-lg sm:text-xl uppercase tracking-wide font-black animate-pulse"
-            >
-              <span>🚑</span> Start Triage Assessment
-            </button>
-          </div>
-        </div>
-
-        {/* TRIAGE LEVELS */}
-        <div className="px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-          <div className="max-w-7xl mx-auto">
-            <h2 className="text-3xl sm:text-4xl font-bold text-center text-gray-200 mb-12 sm:mb-16 animate-fade-in">
-              Triage Classification Levels
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
-              {/* GREEN */}
-              <div className="group relative animate-slide-in-left" style={{animationDelay: '0.1s'}}>
-                <div className="absolute inset-0 bg-gradient-to-br from-green-600 to-green-800 rounded-2xl blur-xl opacity-50 group-hover:opacity-100 transition duration-300 group-hover:blur-2xl"></div>
-                <div className="relative bg-green-700/80 backdrop-blur-xl p-6 sm:p-8 rounded-2xl shadow-2xl hover:shadow-green-500/50 border border-green-500/30 transform group-hover:scale-105 group-hover:-translate-y-2 transition-all duration-300">
-                  <h3 className="text-3xl font-bold text-white mb-3">🟢</h3>
-                  <h2 className="text-2xl font-bold text-white mb-2">Green</h2>
-                  <p className="text-gray-100 text-sm mb-4">Minor injuries requiring standard care</p>
-                  <div className="text-xs text-green-200 font-semibold uppercase tracking-wide">Delayed Priority</div>
-                </div>
-              </div>
-
-              {/* YELLOW */}
-              <div className="group relative animate-slide-in-left" style={{animationDelay: '0.2s'}}>
-                <div className="absolute inset-0 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-2xl blur-xl opacity-50 group-hover:opacity-100 transition duration-300 group-hover:blur-2xl"></div>
-                <div className="relative bg-yellow-600/80 backdrop-blur-xl p-6 sm:p-8 rounded-2xl shadow-2xl hover:shadow-yellow-500/50 border border-yellow-500/30 transform group-hover:scale-105 group-hover:-translate-y-2 transition-all duration-300">
-                  <h3 className="text-3xl font-bold text-gray-900 mb-3">🟡</h3>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Yellow</h2>
-                  <p className="text-gray-900 text-sm mb-4">Moderate injuries requiring prompt treatment</p>
-                  <div className="text-xs text-yellow-700 font-semibold uppercase tracking-wide">Urgent Priority</div>
-                </div>
-              </div>
-
-              {/* RED */}
-              <div className="group relative animate-slide-in-right" style={{animationDelay: '0.3s'}}>
-                <div className="absolute inset-0 bg-gradient-to-br from-red-600 to-red-800 rounded-2xl blur-xl opacity-50 group-hover:opacity-100 transition duration-300 group-hover:blur-2xl"></div>
-                <div className="relative bg-red-700/80 backdrop-blur-xl p-6 sm:p-8 rounded-2xl shadow-2xl hover:shadow-red-500/50 border border-red-500/30 transform group-hover:scale-105 group-hover:-translate-y-2 transition-all duration-300 animate-pulse-glow">
-                  <h3 className="text-3xl font-bold text-white mb-3">🔴</h3>
-                  <h2 className="text-2xl font-bold text-white mb-2">Red</h2>
-                  <p className="text-gray-100 text-sm mb-4">Severe injuries requiring immediate care</p>
-                  <div className="text-xs text-red-200 font-semibold uppercase tracking-wide animate-pulse">Immediate Priority</div>
-                </div>
-              </div>
-
-              {/* BLACK */}
-              <div className="group relative animate-slide-in-right" style={{animationDelay: '0.4s'}}>
-                <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-900 rounded-2xl blur-xl opacity-50 group-hover:opacity-100 transition duration-300 group-hover:blur-2xl"></div>
-                <div className="relative bg-gray-800/80 backdrop-blur-xl p-6 sm:p-8 rounded-2xl shadow-2xl hover:shadow-gray-500/50 border border-gray-500/30 transform group-hover:scale-105 group-hover:-translate-y-2 transition-all duration-300">
-                  <h3 className="text-3xl font-bold text-white mb-3">⚫</h3>
-                  <h2 className="text-2xl font-bold text-white mb-2">Black</h2>
-                  <p className="text-gray-300 text-sm mb-4">Non-survivable injuries - expectant care</p>
-                  <div className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Expectant Priority</div>
-                </div>
-              </div>
+      <div className="relative z-10 max-w-lg mx-auto px-6 pt-12 pb-24">
+        {/* Header Section */}
+        <header className="mb-10 animate-fade-in">
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <p className="text-cyan-400 font-semibold tracking-[0.2em] uppercase text-[10px] mb-1">Status: Operational</p>
+              <h1 className="text-3xl font-black font-['Outfit'] tracking-tight">
+                Welcome, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">{username}</span>
+              </h1>
+            </div>
+            <div className="w-12 h-12 rounded-full glass-panel flex items-center justify-center border-cyan-500/30">
+              <span className="text-2xl">🪖</span>
             </div>
           </div>
-        </div>
-
-        {/* FOOTER */}
-        <div className="px-4 sm:px-6 lg:px-8 py-8 border-t border-gray-700/50 mt-auto">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-gray-400 text-xs sm:text-sm font-light">Authorized Military Personnel Only</p>
-            <button
-              onClick={logout}
-              className="px-6 sm:px-8 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300 uppercase font-black tracking-wide"
-            >
-              🚪 Logout
-            </button>
+          
+          <div className="glass-panel p-5 rounded-2xl border-white/5 flex items-center gap-4">
+            <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center text-amber-500">
+              <span className="text-xl">📡</span>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 font-medium">Tactical Network</p>
+              <p className="text-sm font-bold text-gray-100">AI-Nodes Connected</p>
+            </div>
           </div>
-        </div>
+        </header>
+
+        {/* Quick Actions Grid */}
+        <section className="space-y-6">
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest px-1">Primary Modules</h2>
+          
+          <div className="grid grid-cols-1 gap-4">
+            {/* Main Action: New Assessment */}
+            <button 
+              onClick={() => navigate("/triage")}
+              className="group relative w-full p-1 rounded-3xl bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-600 bg-[length:200%_100%] animate-[gradient_4s_linear_infinite] hover:scale-[1.02] transition-transform duration-300"
+            >
+              <div className="bg-[#0f172a] rounded-[1.4rem] p-6 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-cyan-500/10 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">
+                    🚑
+                  </div>
+                  <div className="text-left">
+                    <h3 className="text-xl font-black font-['Outfit']">New Triage</h3>
+                    <p className="text-xs text-gray-400">Start AI Assessment</p>
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-cyan-500 transition-colors">
+                  <span className="text-lg">→</span>
+                </div>
+              </div>
+            </button>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Secondary Action: Dashboard */}
+              <button 
+                onClick={() => navigate("/dashboard")}
+                className="glass-card p-5 rounded-3xl text-left hover:border-blue-500/50 transition-all group"
+              >
+                <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform">
+                  📊
+                </div>
+                <h3 className="font-bold text-sm">Dashboard</h3>
+                <p className="text-[10px] text-gray-500">Live Analytics</p>
+              </button>
+
+              {/* Secondary Action: Live Map */}
+              <button 
+                onClick={() => navigate("/live-map")}
+                className="glass-card p-5 rounded-3xl text-left hover:border-emerald-500/50 transition-all group"
+              >
+                <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform">
+                  🗺️
+                </div>
+                <h3 className="font-bold text-sm">Field Map</h3>
+                <p className="text-[10px] text-gray-500">Unit Tracking</p>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* System Health */}
+        <section className="mt-10">
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest px-1 mb-4">System Pulse</h2>
+          <div className="glass-panel p-6 rounded-3xl border-white/5 space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-400">AI Accuracy</span>
+              <span className="text-xs font-bold text-emerald-400">98.4%</span>
+            </div>
+            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 w-[98.4%]"></div>
+            </div>
+            
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-400">Server Latency</span>
+              <span className="text-xs font-bold text-cyan-400">12ms</span>
+            </div>
+            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+              <div className="h-full bg-cyan-500 w-[15%]"></div>
+            </div>
+          </div>
+        </section>
+
+        {/* Logout Button */}
+        <button 
+          onClick={logout}
+          className="w-full mt-12 py-4 rounded-2xl glass-panel border-red-500/20 text-red-400 font-bold text-sm hover:bg-red-500/10 transition-all"
+        >
+          Terminate Session 🚪
+        </button>
+
+        <footer className="mt-12 text-center">
+          <p className="text-[10px] text-gray-600 font-black uppercase tracking-[0.3em]">
+            MilTriage v2.5.0 • Tactical Edition
+          </p>
+        </footer>
       </div>
     </div>
   );

@@ -133,25 +133,32 @@ const ChatPanel = ({ recipientId, recipientName, isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="chat-panel-overlay" onClick={onClose}>
-      <div className="chat-panel" onClick={(e) => e.stopPropagation()}>
+    <div className={`chat-panel-overlay ${isOpen ? 'open' : ''}`} onClick={onClose}>
+      <div className="chat-panel glass-panel border-white/10" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className="chat-header">
-          <div>
-            <h3 className="chat-title">💬 {recipientName || "Chat"}</h3>
-            <div className="chat-subtitle">
-              You: {currentUserId ?? "—"} · Recipient: {recipientId ?? "—"}
+        <div className="chat-header border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center text-xl">
+              📡
+            </div>
+            <div>
+              <h3 className="chat-title font-['Outfit'] font-black tracking-tight">{recipientName || "Field Medic"}</h3>
+              <div className="chat-subtitle font-mono text-[8px] uppercase tracking-widest text-cyan-500/60">
+                Secure Link: Established
+              </div>
             </div>
           </div>
-          <button className="chat-close-btn" onClick={onClose}>
+          <button className="w-8 h-8 rounded-full hover:bg-white/5 flex items-center justify-center text-gray-500 transition-colors" onClick={onClose}>
             ✕
           </button>
         </div>
 
         {/* Messages Container */}
-        <div className="chat-messages">
+        <div className="chat-messages custom-scrollbar">
           {messages.length === 0 ? (
-            <div className="chat-empty">Start the conversation...</div>
+            <div className="chat-empty font-mono text-[10px] uppercase tracking-widest text-gray-600">
+              Initializing Communication History...
+            </div>
           ) : (
             messages.map((msg) => (
               <div
@@ -162,8 +169,8 @@ const ChatPanel = ({ recipientId, recipientName, isOpen, onClose }) => {
                     : "received"
                 }`}
               >
-                <div className="message-content">{msg.content}</div>
-                <div className="message-time">
+                <div className="message-content font-medium text-sm">{msg.content}</div>
+                <div className="message-time font-mono text-[9px] uppercase tracking-tighter opacity-40 mt-1">
                   {new Date(msg.timestamp).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -176,18 +183,18 @@ const ChatPanel = ({ recipientId, recipientName, isOpen, onClose }) => {
         </div>
 
         {/* Input Area */}
-        <div className="chat-input-area">
+        <div className="chat-input-area border-t border-white/5">
           <input
             type="text"
-            className="chat-input"
-            placeholder="Type a message..."
+            className="chat-input glass-card"
+            placeholder="Enter secure message..."
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             disabled={!recipientId}
           />
           <button
-            className="chat-send-btn"
+            className="chat-send-btn bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/30 transition-all"
             onClick={sendMessage}
             disabled={!recipientId || !newMessage.trim()}
           >
