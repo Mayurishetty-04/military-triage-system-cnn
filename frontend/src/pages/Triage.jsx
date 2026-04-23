@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { BASE_URL } from "../config";
 import ChatPanel from "../components/ChatPanel";
 import useMessageNotifications from "../hooks/useMessageNotifications";
 
@@ -54,8 +55,7 @@ function TriageApp() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
-        const res = await axios.get(`http://${backendHost}:8000/users/doctors`, {
+        const res = await axios.get(`${BASE_URL}/users/doctors`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (Array.isArray(res.data) && res.data.length > 0) {
@@ -86,7 +86,7 @@ function TriageApp() {
           if (chosen.username === preferredUsername) {
             try {
               await axios.post(
-                `http://${backendHost}:8000/messages/merge-to-default-doctor`,
+                `${BASE_URL}/messages/merge-to-default-doctor`,
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
               );
@@ -112,9 +112,7 @@ function TriageApp() {
   useEffect(() => {
     const pollVitals = async () => {
       try {
-        // Use hostname to work across devices on the same network
-        const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
-        const res = await axios.get(`http://${backendHost}:8000/latest-vitals`);
+        const res = await axios.get(`${BASE_URL}/latest-vitals`);
 
         if (res.data && res.data.timestamp) {
           console.log("Live vitals received:", res.data);
@@ -275,7 +273,7 @@ function TriageApp() {
 
     try {
       setLoading(true);
-      const res = await axios.post("http://127.0.0.1:8000/predict", formData, {
+      const res = await axios.post(`${BASE_URL}/predict`, formData, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       setResult(res.data);
@@ -292,8 +290,7 @@ function TriageApp() {
   const downloadPDF = async () => {
     if (!result) return;
     try {
-      const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
-      const res = await axios.post(`http://${backendHost}:8000/download-report`, result, {
+      const res = await axios.post(`${BASE_URL}/download-report`, result, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
           "Content-Type": "application/json"
@@ -453,7 +450,14 @@ function TriageApp() {
                   <span>📂</span> {image ? 'Replace Image' : 'Upload File'}
                 </label>
               </div>
-              {image && <p className="text-[10px] text-emerald-400 font-bold text-center animate-pulse">✓ IMAGE READY FOR ANALYSIS</p>}
+              {image && (
+                <div className="space-y-2 mt-4">
+                  <div className="w-full rounded-2xl overflow-hidden border border-emerald-500/30">
+                    <img src={URL.createObjectURL(image)} alt="Preview" className="w-full max-h-48 object-contain bg-black/50" />
+                  </div>
+                  <p className="text-[10px] text-emerald-400 font-bold text-center animate-pulse">✓ IMAGE READY FOR ANALYSIS</p>
+                </div>
+              )}
               <canvas ref={canvasRef} hidden />
             </section>
 
@@ -470,6 +474,12 @@ function TriageApp() {
                     </span>
                   </label>
                 </div>
+                {audio && (
+                  <div className="mt-2">
+                    <audio controls src={URL.createObjectURL(audio)} className="w-full h-10 outline-none" />
+                    <p className="text-[10px] text-cyan-400 font-bold text-center mt-2 animate-pulse">✓ AUDIO READY FOR ANALYSIS</p>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3">

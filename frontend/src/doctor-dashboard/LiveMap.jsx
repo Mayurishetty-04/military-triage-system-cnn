@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
+import { BASE_URL } from '../config';
 import { useNavigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import Sidebar from './Sidebar';
@@ -64,8 +65,7 @@ const LiveMap = ({ patients: initialPatients, isStandAlone = false }) => {
         if (isStandAlone) {
             const fetchPatients = async () => {
                 try {
-                    const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
-                    const res = await axios.get(`http://${backendHost}:8000/patients`, {
+                    const res = await axios.get(`${BASE_URL}/patients`, {
                         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
                     });
                     setPatients(res.data);
@@ -108,7 +108,7 @@ const LiveMap = ({ patients: initialPatients, isStandAlone = false }) => {
 
     const fetchHistory = async (patientId) => {
         try {
-            const res = await axios.get(`http://127.0.0.1:8000/patients/${patientId}/history`, {
+            const res = await axios.get(`${BASE_URL}/patients/${patientId}/history`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
             setHistory(res.data);

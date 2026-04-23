@@ -1,7 +1,8 @@
 import io
 import random
 import os
-from datetime import datetime
+import math
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
@@ -84,8 +85,17 @@ app.include_router(auth_router, prefix="/auth")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "http://10.0.2.2:8000",
+        "capacitor://localhost",
+        "http://localhost",
+        "*" # Temporarily re-allowing all for Android Emulator compatibility
+    ],
+    allow_credentials=False, # Must be false if origins are *
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -95,6 +105,29 @@ if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+@app.on_event("startup")
+def startup_event():
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        teams = db.query(models.RescueTeam).all()
+        if not teams:
+            for i in range(1, 6):
+                team = models.RescueTeam(name=f"Rescue Team {i}", is_available=1)
+                db.add(team)
+            db.commit()
+    except Exception as e:
+        print(f"Error initializing teams: {e}")
+    finally:
+        db.close()
+
+
+@app.get("/ping")
+def ping():
+    return {"status": "ok", "message": "Backend is reachable!"}
+
+
 
 
 # ---- GLOBAL STATE FOR LIVE VITALS ----
@@ -168,9 +201,13 @@ def get_db():
 
 @app.post("/patients")
 def create_patient(patient: PatientCreate, db = Depends(get_db)):
-    # Calculate priority based on status
-    priority_map = {"RED": 1, "YELLOW": 2, "GREEN": 3, "BLACK": 4}
-    priority = priority_map.get(patient.status.upper(), 4)
+    # Calculate dynamic priority based on status and clinical signs
+    priority = calculate_dynamic_priority(
+        patient.status, 
+        patient.survivalProbability, 
+        patient.vitals.spo2, 
+        patient.vitals.heartRate
+    )
 
     db_patient = models.Patient(
         patientId=patient.patientId,
@@ -183,7 +220,7 @@ def create_patient(patient: PatientCreate, db = Depends(get_db)):
         audioScore=patient.aiScores.audio,
         videoScore=patient.aiScores.video,
         recommendation=patient.recommendation,
-        priority=priority
+        priority=priority  # NOW A FLOAT
     )
     db.add(db_patient)
     db.commit()
@@ -219,9 +256,13 @@ def update_patient(patient_id: str, patient_update: PatientUpdate, db = Depends(
     
     if patient_update.status:
         db_patient.status = patient_update.status.upper()
-        # Update priority if status changed
-        priority_map = {"RED": 1, "YELLOW": 2, "GREEN": 3, "BLACK": 4}
-        db_patient.priority = priority_map.get(db_patient.status, 4)
+        # Update priority if status changed, incorporating existing vitals
+        db_patient.priority = calculate_dynamic_priority(
+            db_patient.status, 
+            db_patient.survivalProbability, 
+            db_patient.spo2, 
+            db_patient.heartRate
+        )
     
     if patient_update.priority is not None:
         db_patient.priority = patient_update.priority
@@ -243,6 +284,87 @@ def acknowledge_patient(id: int, db = Depends(get_db)):
     db.commit()
     db.refresh(db_patient)
     return {"message": "Patient alert acknowledged successfully", "patientId": db_patient.patientId}
+
+@app.post("/patients/{patient_id}/dispatch")
+def dispatch_team(patient_id: str, db: Session = Depends(get_db)):
+    db_patient = db.query(models.Patient).filter(models.Patient.patientId == patient_id).first()
+    if not db_patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+        
+    if db_patient.assigned_team_id:
+        team = db.query(models.RescueTeam).filter(models.RescueTeam.id == db_patient.assigned_team_id).first()
+        return {"message": f"Patient already assigned to {team.name}", "team": team.name}
+
+    now = datetime.now()
+
+    # Find if any active team is near this patient (within 1km)
+    active_teams = db.query(models.RescueTeam).filter(
+        models.RescueTeam.busy_until != None,
+        models.RescueTeam.busy_until > now
+    ).all()
+
+    assigned_team = None
+
+    for team in active_teams:
+        if team.current_lat and team.current_lng and db_patient.latitude and db_patient.longitude:
+            dist = haversine_distance(team.current_lat, team.current_lng, db_patient.latitude, db_patient.longitude)
+            if dist <= 1.0: # 1 km proximity
+                assigned_team = team
+                break
+
+    if not assigned_team:
+        # Find next available team
+        available_teams = db.query(models.RescueTeam).filter(
+            (models.RescueTeam.busy_until == None) | (models.RescueTeam.busy_until <= now)
+        ).order_by(models.RescueTeam.id).all()
+        
+        if available_teams:
+            assigned_team = available_teams[0]
+
+    if assigned_team:
+        assigned_team.busy_until = now + timedelta(minutes=20)
+        assigned_team.is_available = 0
+        if db_patient.latitude and db_patient.longitude:
+            assigned_team.current_lat = db_patient.latitude
+            assigned_team.current_lng = db_patient.longitude
+        
+        db_patient.assigned_team_id = assigned_team.id
+        db.commit()
+        return {"message": f"Assigned to {assigned_team.name}", "team": assigned_team.name, "team_id": assigned_team.id}
+    else:
+        raise HTTPException(status_code=400, detail="No rescue teams available. All teams are busy.")
+
+@app.get("/teams")
+def get_teams(db: Session = Depends(get_db)):
+    now = datetime.now()
+    teams = db.query(models.RescueTeam).all()
+    result = []
+    for t in teams:
+        status = "Available"
+        if t.busy_until and t.busy_until > now:
+            status = f"Busy until {t.busy_until.strftime('%H:%M:%S')}"
+        result.append({
+            "id": t.id,
+            "name": t.name,
+            "status": status,
+            "lat": t.current_lat,
+            "lng": t.current_lng
+        })
+    return result
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+        return float('inf')
+    
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    
+    a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    
+    distance = R * c
+    return distance
 
 # ============================================================
 # CONSTANTS
@@ -279,6 +401,35 @@ TRIAGE_ACTIONS = {
 # ============================================================
 # HELPER FUNCTIONS
 # ============================================================
+
+def calculate_dynamic_priority(status, survival_prob, spo2, heart_rate):
+    """
+    Computes a float priority where the integer part is based on triage category 
+    (1=Red, 2=Yellow, etc) and the decimal part is dynamically computed from vitals.
+    Lower number = higher priority.
+    """
+    base = {"RED": 1.0, "YELLOW": 2.0, "GREEN": 3.0, "BLACK": 4.0}.get(status.upper(), 5.0)
+    
+    surv_prob = survival_prob if survival_prob is not None else 50.0
+    surv_component = (min(max(surv_prob, 0.0), 100.0) / 100.0) * 0.49
+    
+    spo2_val = spo2 if spo2 is not None else 95
+    spo2_clamped = min(max(spo2_val, 70), 100)
+    spo2_component = ((spo2_clamped - 70) / 30.0) * 0.25
+    
+    hr_val = heart_rate if heart_rate is not None else 80
+    if 60 <= hr_val <= 100:
+        hr_component = 0.25
+    else:
+        dist = min(abs(hr_val - 80), 80)
+        norm_dist = dist / 80.0
+        hr_component = (1.0 - norm_dist) * 0.25
+
+    offset = surv_component + spo2_component + hr_component
+    offset = min(max(offset, 0.0), 0.99)
+    
+    return base + offset
+
 
 def to_prob_dict(raw: Optional[dict]):
     """
@@ -524,8 +675,19 @@ async def predict(
 
     # ---------------- AUDIO ----------------
     audio_raw = None
+    audio_path = None
     if audio:
+        file_extension = os.path.splitext(audio.filename)[1]
+        if not file_extension:
+            file_extension = ".wav"
+        filename = f"aud_{int(datetime.now().timestamp())}_{random.randint(1000, 9999)}{file_extension}"
+        filepath = os.path.join(UPLOAD_DIR, filename)
+        
         audio_bytes = await audio.read()
+        with open(filepath, "wb") as buffer:
+            buffer.write(audio_bytes)
+        
+        audio_path = f"/uploads/{filename}"
         audio_raw = predict_audio(audio_bytes)
         modalities_used.append("audio")
 
@@ -591,7 +753,13 @@ async def predict(
         }
         dynamic_survival = calculate_dynamic_survival(vitals_payload, final_label)
 
-        priority_map = {"RED": 1, "YELLOW": 2, "GREEN": 3, "BLACK": 4}
+        dynamic_priority = calculate_dynamic_priority(
+            final_label.upper(), 
+            dynamic_survival, 
+            spo2, 
+            pulse
+        )
+
         db_patient = models.Patient(
             patientId=patient_id,
             patientName=current_user.username if current_user else None,
@@ -605,10 +773,11 @@ async def predict(
             textScore=ai_scores["text"],
             videoScore=ai_scores["video"],
             recommendation=", ".join(TRIAGE_ACTIONS[final_label]),
-            priority=priority_map.get(final_label.upper(), 4),
+            priority=dynamic_priority,
             latitude=latitude,
             longitude=longitude,
             image_path=image_path,
+            audio_path=audio_path,
             user_id=current_user.id if current_user and current_user.role == "patient" else None
         )
         db.add(db_patient)

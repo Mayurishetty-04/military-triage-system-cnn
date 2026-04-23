@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import axios from 'axios';
+import { BASE_URL } from '../config';
 
 const useMessageNotifications = () => {
   const lastNotifiedByConvIdRef = useRef(new Map());
@@ -10,7 +11,7 @@ const useMessageNotifications = () => {
 
     const checkMessages = async () => {
       try {
-        const res = await axios.get('http://127.0.0.1:8000/messages/conversations', {
+        const res = await axios.get(`${BASE_URL}/messages/conversations`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 

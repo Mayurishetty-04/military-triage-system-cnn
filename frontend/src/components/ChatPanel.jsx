@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
+import { BASE_URL } from "../config";
 import "./ChatPanel.css";
 
 const ChatPanel = ({ recipientId, recipientName, isOpen, onClose }) => {
@@ -39,7 +40,7 @@ const ChatPanel = ({ recipientId, recipientName, isOpen, onClose }) => {
 
       // Get conversations to find the one with this recipient
       const convRes = await axios.get(
-        "http://127.0.0.1:8000/messages/conversations",
+        `${BASE_URL}/messages/conversations`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -56,7 +57,7 @@ const ChatPanel = ({ recipientId, recipientName, isOpen, onClose }) => {
       if (conv) {
         // Fetch messages from this conversation
         const msgRes = await axios.get(
-          `http://127.0.0.1:8000/messages/conversation/${conv.id}`,
+          `${BASE_URL}/messages/conversation/${conv.id}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setMessages(msgRes.data);
@@ -98,7 +99,7 @@ const ChatPanel = ({ recipientId, recipientName, isOpen, onClose }) => {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
-        "http://127.0.0.1:8000/messages/send",
+        `${BASE_URL}/messages/send`,
         {
           content: newMessage,
           recipient_id: rid,

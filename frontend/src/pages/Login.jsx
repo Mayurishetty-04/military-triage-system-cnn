@@ -44,7 +44,19 @@ function Login() {
         navigate("/triage");
       }
     } catch (err) {
-      const msg = err.response?.data?.detail || "Invalid credentials. Please try again.";
+      let msg = "Invalid credentials. Please try again.";
+      
+      if (err.response) {
+        // The request was made and the server responded with a status code
+        msg = err.response.data?.detail || msg;
+      } else if (err.request) {
+        // The request was made but no response was received
+        msg = "BACKEND UNREACHABLE (Network Error). Check 10.0.2.2 connectivity.";
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        msg = err.message;
+      }
+      
       setError(msg);
     } finally {
       setLoading(false);

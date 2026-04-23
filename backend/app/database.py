@@ -2,9 +2,10 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Use absolute path to avoid issues with different working directories on Windows
+# Use absolute path to guarantee connection to the existing database
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(os.path.dirname(BASE_DIR), "triage.db")
+# Note: Since database.py is in app/ we need to go up one directory
+DB_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "triage.db"))
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # connect_args={"check_same_thread": False} is required for SQLite and FastAPI

@@ -12,6 +12,15 @@ class User(Base):
     patientId = Column(String, nullable=True, unique=True)  # Fixed ID assigned at registration
     records = relationship("TriageRecord", back_populates="user")
 
+class RescueTeam(Base):
+    __tablename__ = "rescue_teams"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    is_available = Column(Integer, default=1)
+    busy_until = Column(DateTime, nullable=True)
+    current_lat = Column(Float, nullable=True)
+    current_lng = Column(Float, nullable=True)
+
 class TriageRecord(Base): 
     __tablename__ = "triage_records" 
     id = Column(Integer, primary_key=True, index=True) 
@@ -37,14 +46,17 @@ class Patient(Base):
     videoScore = Column(Float)
     textScore = Column(Float, nullable=True)
     recommendation = Column(String)
-    priority = Column(Integer)  # 1 for RED, 2 for YELLOW, 3 for GREEN, 4 for BLACK
+    priority = Column(Float)  # 1.x for RED, 2.x for YELLOW, 3.x for GREEN, 4.x for BLACK
     explanation = Column(String, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     image_path = Column(String, nullable=True)
+    audio_path = Column(String, nullable=True)
     is_acknowledged = Column(Integer, default=0) # 0 for False, 1 for True (SQLite boolean)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     user = relationship("User")
+    assigned_team_id = Column(Integer, ForeignKey("rescue_teams.id"), nullable=True)
+    assigned_team = relationship("RescueTeam")
 
 class Message(Base):
     __tablename__ = "messages"

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const Sidebar = ({ activeView, setActiveView, onLogout }) => {
+const Sidebar = ({ activeView, setActiveView, onLogout, isMobileMenuOpen, setIsMobileMenuOpen }) => {
     const navigate = useNavigate();
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -18,15 +18,14 @@ const Sidebar = ({ activeView, setActiveView, onLogout }) => {
         } else {
             if (window.location.pathname !== '/dashboard') {
                 navigate('/dashboard');
-                // We might need a way to pass the activeView back to Dashboard
-                // maybe via state or the dashboard can check searchParams
             }
             setActiveView(item.id);
         }
+        if (setIsMobileMenuOpen) setIsMobileMenuOpen(false);
     };
 
     return (
-        <div className="sidebar">
+        <div className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
             <div className="sidebar-logo">
                 <div className="logo-icon">➕</div>
                 <span>TRIAGE MD</span>

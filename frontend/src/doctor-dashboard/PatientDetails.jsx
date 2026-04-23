@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { BASE_URL } from '../config';
 
 const getSurvivalDetails = (status, survivalProb) => {
     const conf = (survivalProb || 0) / 100;
@@ -29,6 +30,8 @@ const getSurvivalDetails = (status, survivalProb) => {
 };
 
 const PatientDetails = ({ patient, onClose, onViewHistory, onOpenChat }) => {
+    const [enlargedImage, setEnlargedImage] = useState(null);
+
     if (!patient) return null;
     const { chance, label: survivalLabel } = getSurvivalDetails(patient.status, patient.survivalProbability);
 
@@ -41,11 +44,11 @@ const PatientDetails = ({ patient, onClose, onViewHistory, onOpenChat }) => {
 
     return (
         <div className="details-overlay" onClick={onClose} style={{ backdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.7)' }}>
-            <div 
-                className="details-card" 
+            <div
+                className="details-card"
                 onClick={(e) => e.stopPropagation()}
-                style={{ 
-                    background: '#0f172a', 
+                style={{
+                    background: '#0f172a',
                     border: '1px solid rgba(255,255,255,0.1)',
                     boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
                     padding: 0,
@@ -57,8 +60,8 @@ const PatientDetails = ({ patient, onClose, onViewHistory, onOpenChat }) => {
             >
                 {/* 🌟 Dynamic Status Header */}
                 <div style={{ background: theme.gradient, padding: '2rem', position: 'relative' }}>
-                    <button 
-                        className="close-btn" 
+                    <button
+                        className="close-btn"
                         onClick={onClose}
                         style={{ position: 'absolute', top: '1rem', right: '1rem', color: '#fff', opacity: 0.7 }}
                     >
@@ -97,18 +100,73 @@ const PatientDetails = ({ patient, onClose, onViewHistory, onOpenChat }) => {
                     </div>
 
                     {/* Vitals Intelligence Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '2.5rem' }}>
                         {[
                             { label: 'SPO2', value: `${patient.spo2}%`, icon: '🫁', color: patient.spo2 < 90 ? '#ef4444' : '#10b981' },
                             { label: 'HR', value: `${patient.heartRate} bpm`, icon: '💓', color: (patient.heartRate > 120 || patient.heartRate < 50) ? '#ef4444' : '#38bdf8' },
-                            { label: 'SURVIVAL', value: chance, icon: '🛡️', color: theme.color }
+                            { label: 'SURVIVAL', value: chance, icon: '🛡️', color: theme.color },
+                            { label: 'PRIORITY', value: patient.priority != null ? patient.priority.toFixed(4) : "—", icon: '⭐', color: '#a855f7' }
                         ].map((v, i) => (
-                            <div key={i} style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.03)', textAlign: 'center' }}>
+                            <div key={i} style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '1rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.03)', textAlign: 'center' }}>
                                 <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{v.icon}</div>
                                 <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.25rem' }}>{v.label}</div>
-                                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: v.color }}>{v.value}</div>
+                                <div style={{ fontSize: '1.15rem', fontWeight: 900, color: v.color }}>{v.value}</div>
                             </div>
                         ))}
+                    </div>
+
+                    {/* Comprehensive Patient Input Data */}
+                    <div style={{ marginBottom: '2.5rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '1.5rem' }}>
+                        <h3 style={{ fontSize: '0.8rem', fontWeight: 900, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ width: '12px', height: '12px', background: '#3b82f6', borderRadius: '50%' }}></span>
+                            Comprehensive Patient Data
+                        </h3>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                            {/* Textual Description */}
+                            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.02)' }}>
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 800 }}>
+                                    📝 Reported Symptoms & Context
+                                </div>
+                                <div style={{ fontSize: '1rem', color: '#f8fafc', lineHeight: 1.5 }}>
+                                    {patient.injuryType || "No textual description provided by the patient."}
+                                </div>
+                            </div>
+
+                            {/* Media Preview (Images/Video/Audio) */}
+                            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.02)' }}>
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 800 }}>
+                                    📸 Multimedia Attachments
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    {patient.image_path && (
+                                        <div style={{ position: 'relative', width: '100%', height: '120px', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                            <img 
+                                                src={patient.image_path.startsWith('http') ? patient.image_path : `${BASE_URL}${patient.image_path.replace(/\\/g, '/').startsWith('/') ? '' : '/'}${patient.image_path.replace(/\\/g, '/')}`} 
+                                                alt="Patient upload" 
+                                                onClick={() => setEnlargedImage(patient.image_path.startsWith('http') ? patient.image_path : `${BASE_URL}${patient.image_path.replace(/\\/g, '/').startsWith('/') ? '' : '/'}${patient.image_path.replace(/\\/g, '/')}`)}
+                                                style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000', cursor: 'zoom-in' }} 
+                                            />
+                                        </div>
+                                    )}
+                                    {patient.audio_path && (
+                                        <div style={{ width: '100%' }}>
+                                            <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem', fontWeight: 700 }}>🎵 Audio Recording</div>
+                                            <audio 
+                                                controls 
+                                                src={patient.audio_path.startsWith('http') ? patient.audio_path : `${BASE_URL}${patient.audio_path.replace(/\\/g, '/').startsWith('/') ? '' : '/'}${patient.audio_path.replace(/\\/g, '/')}`}
+                                                style={{ width: '100%', height: '40px', borderRadius: '0.5rem' }} 
+                                            />
+                                        </div>
+                                    )}
+                                    {!patient.image_path && !patient.audio_path && (
+                                        <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100px', width: '100%', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem' }}>
+                                            No multimedia evidence attached
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {/* AI Confidence Analysis */}
@@ -151,8 +209,8 @@ const PatientDetails = ({ patient, onClose, onViewHistory, onOpenChat }) => {
                         <button
                             className="history-btn"
                             onClick={() => onOpenChat && onOpenChat(patient.user_id, patient.patientName)}
-                            style={{ 
-                                padding: '1.25rem', 
+                            style={{
+                                padding: '1.25rem',
                                 background: 'linear-gradient(135deg, #0369a1 0%, #0284c7 100%)',
                                 border: 'none',
                                 borderRadius: '1rem',
@@ -173,8 +231,8 @@ const PatientDetails = ({ patient, onClose, onViewHistory, onOpenChat }) => {
                         <button
                             className="history-btn"
                             onClick={onViewHistory}
-                            style={{ 
-                                padding: '1.25rem', 
+                            style={{
+                                padding: '1.25rem',
                                 background: 'transparent',
                                 border: '1px dashed rgba(255,255,255,0.2)',
                                 borderRadius: '1rem',
@@ -195,6 +253,16 @@ const PatientDetails = ({ patient, onClose, onViewHistory, onOpenChat }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Enlarged Image Modal */}
+            {enlargedImage && (
+                <div 
+                    onClick={(e) => { e.stopPropagation(); setEnlargedImage(null); }} 
+                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}
+                >
+                    <img src={enlargedImage} alt="Enlarged patient upload" style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '0.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 1)' }} />
+                </div>
+            )}
         </div>
     );
 };

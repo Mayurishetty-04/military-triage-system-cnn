@@ -1,18 +1,35 @@
 import React from 'react';
 import axios from 'axios';
+import { BASE_URL } from '../config';
 import './styles.css';
 
 const EmergencyResponseModal = ({ patient, onClose, onAcknowledge }) => {
     const [isAcknowledging, setIsAcknowledging] = React.useState(false);
     const [isDone, setIsDone] = React.useState(patient.is_acknowledged === 1);
+    const [dispatchStatus, setDispatchStatus] = React.useState(null);
+    const [isDispatching, setIsDispatching] = React.useState(false);
+
+    const handleDispatch = async () => {
+        setIsDispatching(true);
+        try {
+            const res = await axios.post(`${BASE_URL}/patients/${patient.patientId}/dispatch`, {}, {
+                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+            });
+            setDispatchStatus(res.data.message);
+        } catch (err) {
+            console.error("Dispatch failed", err);
+            setDispatchStatus("Dispatch failed. No teams available or network error.");
+        } finally {
+            setIsDispatching(false);
+        }
+    };
 
     if (!patient) return null;
 
     const handleAcknowledge = async () => {
         setIsAcknowledging(true);
         try {
-            const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
-            await axios.post(`http://${backendHost}:8000/patients/${patient.id}/acknowledge`, {}, {
+            await axios.post(`${BASE_URL}/patients/${patient.id}/acknowledge`, {}, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
             setIsDone(true);
@@ -218,40 +235,79 @@ const EmergencyResponseModal = ({ patient, onClose, onAcknowledge }) => {
                         </section>
                     </div>
 
-                    {/* Final Action Button */}
-                    <button 
-                        onClick={handleAcknowledge} 
-                        disabled={isAcknowledging || isDone}
-                        style={{ 
-                            width: '100%', 
-                            padding: '1.25rem', 
-                            background: isDone ? '#10b981' : theme.color === '#f8fafc' ? '#334155' : theme.color, 
-                            color: '#fff', 
-                            border: 'none', 
-                            borderRadius: '1rem', 
-                            fontSize: '1.1rem', 
-                            fontWeight: 800, 
-                            cursor: (isAcknowledging || isDone) ? 'default' : 'pointer', 
-                            transition: 'all 0.3s', 
-                            marginTop: '1rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.75rem',
-                            boxShadow: `0 4px 15px ${theme.shadow}`
-                        }}
-                    >
-                        {isAcknowledging ? (
-                            <>
-                                <span style={{ width: '20px', height: '20px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }}></span>
-                                🧬 CONFIRMING RECEIPT...
-                            </>
-                        ) : isDone ? (
-                            <>✅ TACTICAL RECEIPT CONFIRMED</>
-                        ) : (
-                            <>⚡ CONFIRM RECEIPT & DEPLOY ASSETS</>
-                        )}
-                    </button>
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                        <button 
+                            onClick={handleDispatch} 
+                            disabled={isDispatching || dispatchStatus?.includes("Assigned")}
+                            style={{ 
+                                flex: 1, 
+                                padding: '1.25rem', 
+                                background: dispatchStatus?.includes("Assigned") ? '#3b82f6' : '#ef4444', 
+                                color: '#fff', 
+                                border: 'none', 
+                                borderRadius: '1rem', 
+                                fontSize: '1.1rem', 
+                                fontWeight: 800, 
+                                cursor: (isDispatching || dispatchStatus?.includes("Assigned")) ? 'default' : 'pointer', 
+                                transition: 'all 0.3s', 
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.75rem',
+                                boxShadow: `0 4px 15px rgba(239, 68, 68, 0.4)`
+                            }}
+                        >
+                            {isDispatching ? (
+                                <>
+                                    <span style={{ width: '20px', height: '20px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }}></span>
+                                    🚁 DISPATCHING...
+                                </>
+                            ) : dispatchStatus?.includes("Assigned") ? (
+                                <>✅ {dispatchStatus.toUpperCase()}</>
+                            ) : (
+                                <>🚨 EMERGENCY ALERT: DISPATCH TEAM</>
+                            )}
+                        </button>
+
+                        <button 
+                            onClick={handleAcknowledge} 
+                            disabled={isAcknowledging || isDone}
+                            style={{ 
+                                flex: 1, 
+                                padding: '1.25rem', 
+                                background: isDone ? '#10b981' : theme.color === '#f8fafc' ? '#334155' : theme.color, 
+                                color: '#fff', 
+                                border: 'none', 
+                                borderRadius: '1rem', 
+                                fontSize: '1.1rem', 
+                                fontWeight: 800, 
+                                cursor: (isAcknowledging || isDone) ? 'default' : 'pointer', 
+                                transition: 'all 0.3s', 
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.75rem',
+                                boxShadow: `0 4px 15px ${theme.shadow}`
+                            }}
+                        >
+                            {isAcknowledging ? (
+                                <>
+                                    <span style={{ width: '20px', height: '20px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }}></span>
+                                    🧬 CONFIRMING...
+                                </>
+                            ) : isDone ? (
+                                <>✅ RECEIPT CONFIRMED</>
+                            ) : (
+                                <>⚡ CONFIRM RECEIPT</>
+                            )}
+                        </button>
+                    </div>
+                    {dispatchStatus && !dispatchStatus.includes("Assigned") && (
+                        <div style={{ color: '#ef4444', textAlign: 'center', marginTop: '0.5rem', fontWeight: 'bold' }}>
+                            {dispatchStatus}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

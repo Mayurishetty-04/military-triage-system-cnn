@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { BASE_URL } from '../config';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import PatientTable from './PatientTable';
@@ -13,6 +14,7 @@ import './styles.css';
 const Dashboard = () => {
     const navigate = useNavigate();
     const [patients, setPatients] = useState([]);
+    const [teams, setTeams] = useState([]);
     const [registeredPatients, setRegisteredPatients] = useState([]);
     const [activeView, setActiveView] = useState('dashboard');
     const [selectedPatient, setSelectedPatient] = useState(null);
@@ -34,6 +36,7 @@ const Dashboard = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [sortOrder, setSortOrder] = useState('newest');
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const handleLogout = () => {
         localStorage.removeItem("token");
@@ -66,7 +69,7 @@ const Dashboard = () => {
 
     const fetchConversations = async () => {
         try {
-            const res = await axios.get('http://127.0.0.1:8000/messages/conversations', {
+            const res = await axios.get(`${BASE_URL}/messages/conversations`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
             });
             setConversations(Array.isArray(res.data) ? res.data : []);
@@ -84,8 +87,7 @@ const Dashboard = () => {
 
     const fetchRegisteredPatients = async () => {
         try {
-            const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
-            const res = await axios.get(`http://${backendHost}:8000/users/patients`, {
+            const res = await axios.get(`${BASE_URL}/users/patients`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
             setRegisteredPatients(Array.isArray(res.data) ? res.data : []);
@@ -97,7 +99,11 @@ const Dashboard = () => {
     useEffect(() => {
         fetchPatients();
         fetchRegisteredPatients();
-        const interval = setInterval(fetchPatients, 10000);
+        fetchTeams();
+        const interval = setInterval(() => {
+            fetchPatients();
+            fetchTeams();
+        }, 10000);
         const rosterInterval = setInterval(fetchRegisteredPatients, 30000);
         return () => {
             clearInterval(interval);
@@ -105,15 +111,25 @@ const Dashboard = () => {
         };
     }, []);
 
+    const fetchTeams = async () => {
+        try {
+            const res = await axios.get(`${BASE_URL}/teams`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+            });
+            setTeams(res.data);
+        } catch (err) {
+            console.error("Failed to fetch teams", err);
+        }
+    };
+
     const dismissNotification = (id) => {
         setNotifications(prev => prev.filter(n => n.id !== id));
     };
 
     const fetchPatients = async () => {
         try {
-            const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
             // Fetch ALL records (history) to properly detect every new triage event
-            const res = await axios.get(`http://${backendHost}:8000/patients`, {
+            const res = await axios.get(`${BASE_URL}/patients`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
             const data = res.data;
@@ -160,8 +176,7 @@ const Dashboard = () => {
 
     const fetchHistory = async (patientId) => {
         try {
-            const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
-            const res = await axios.get(`http://${backendHost}:8000/patients/${patientId}/history`, {
+            const res = await axios.get(`${BASE_URL}/patients/${patientId}/history`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
             setHistory(res.data);
@@ -378,8 +393,7 @@ const Dashboard = () => {
                             </select>
                         </div>
 
-                        <PatientTable patients={filteredPatients} onSelectPatient={setSelectedPatient} />
-
+                        <PatientTable patients={filteredPatients} teams={teams} onSelectPatient={setSelectedPatient} />
 
                     </div>
                 );
@@ -392,7 +406,7 @@ const Dashboard = () => {
                             <p style={{ color: '#fca5a5', fontWeight: 'bold' }}>IMMEDIATE MEDICAL INTERVENTION REQUIRED</p>
                         </header>
                         <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '2rem', borderRadius: '1.5rem', border: '2px solid rgba(255,255,255,0.1)' }}>
-                            <PatientTable patients={unacknowledged} onSelectPatient={setSelectedEmergencyPatient} />
+                            <PatientTable patients={unacknowledged} teams={teams} onSelectPatient={setSelectedEmergencyPatient} />
                         </div>
                     </div>
                 );
@@ -619,12 +633,23 @@ const Dashboard = () => {
 
     return (
         <div className="dashboard-layout">
+            {/* Mobile Menu Overlay */}
+            {isMobileMenuOpen && (
+                <div className="mobile-menu-overlay" onClick={() => setIsMobileMenuOpen(false)}></div>
+            )}
             <Sidebar
                 activeView={activeView}
                 setActiveView={setActiveView}
                 onLogout={handleLogout}
+                isMobileMenuOpen={isMobileMenuOpen}
+                setIsMobileMenuOpen={setIsMobileMenuOpen}
             />
             <main className={`dashboard-content ${activeView === 'map' ? 'full-bleed' : ''}`}>
+                <div className="mobile-header">
+                    <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(true)}>☰</button>
+                    <span className="mobile-header-title">TRIAGE MD</span>
+                    <div style={{ width: '40px' }}></div> {/* Spacer for centering */}
+                </div>
                 {renderContent()}
             </main>
 
