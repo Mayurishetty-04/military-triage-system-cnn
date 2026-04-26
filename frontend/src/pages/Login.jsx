@@ -51,7 +51,7 @@ function Login() {
         msg = err.response.data?.detail || msg;
       } else if (err.request) {
         // The request was made but no response was received
-        msg = "BACKEND UNREACHABLE (Network Error). Check 10.0.2.2 connectivity.";
+        msg = `BACKEND UNREACHABLE (Network Error). Check connection to ${API.defaults.baseURL}`;
       } else {
         // Something happened in setting up the request that triggered an Error
         msg = err.message;

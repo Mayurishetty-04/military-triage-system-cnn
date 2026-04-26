@@ -49,6 +49,7 @@ class VitalData(BaseModel):
     spo2: int
     systolic_bp: int
     diastolic_bp: int
+    patient_id: Optional[str] = None
 
 
 class AIScores(BaseModel):
@@ -131,7 +132,10 @@ def ping():
 
 
 # ---- GLOBAL STATE FOR LIVE VITALS ----
-# Stores the last received vitals from the Android Bridge
+# Stores the last received vitals keyed by patientId
+latest_vitals_by_patient = {}
+
+# Fallback for backward compatibility
 latest_vitals = {
     "heart_rate": None,
     "spo2": None,
@@ -141,13 +145,22 @@ latest_vitals = {
     "timestamp": None
 }
 
+def get_db():
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 @app.post("/realtime-vitals")
-def receive_vitals(data: VitalData):
+def receive_vitals(data: VitalData, db: Session = Depends(get_db)):
     """
-    Receives real-time vitals from Android Bridge App.
-    Performs fast triage classification and stores it for the frontend.
+    Receives real-time vitals from Android Bridge App or Simulator.
+    Performs fast triage classification and stores it.
     """
-    global latest_vitals
+    global latest_vitals, latest_vitals_by_patient
+    
     triage = "GREEN"
     reason = "Stable: Patient compensating well, normal vitals."
 
@@ -166,24 +179,63 @@ def receive_vitals(data: VitalData):
         triage = "YELLOW"
         reason = f"Delayed: Early signs of stress/shock (SpO2={data.spo2}%, HR={data.heart_rate}, SysBP={data.systolic_bp})"
 
-    # Store for frontend
-    latest_vitals = {
+    vitals_dict = {
         "heart_rate": data.heart_rate,
         "spo2": data.spo2,
         "systolic_bp": data.systolic_bp,
         "diastolic_bp": data.diastolic_bp,
         "triage": triage,
         "reason": reason,
-        "timestamp": datetime.datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat()
     }
 
-    return latest_vitals
+    # Store globally for legacy polling
+    latest_vitals = vitals_dict
+
+    # Store by patientId
+    if data.patient_id:
+        latest_vitals_by_patient[data.patient_id] = vitals_dict
+        
+        # Update database if a record exists for this patient
+        try:
+            # Find the most recent record for this patient
+            db_patient = db.query(models.Patient).filter(
+                models.Patient.patientId == data.patient_id
+            ).order_by(models.Patient.timestamp.desc()).first()
+            
+            if db_patient:
+                db_patient.heartRate = data.heart_rate
+                db_patient.spo2 = data.spo2
+                db_patient.status = triage
+                
+                # Recalculate priority and survival if we have a record
+                vitals_payload = {
+                    "pulse": data.heart_rate,
+                    "spo2": data.spo2,
+                    "bp_systolic": data.systolic_bp,
+                    "resp_rate": 16
+                }
+                from app.vitals import calculate_dynamic_survival
+                db_patient.survivalProbability = calculate_dynamic_survival(vitals_payload, triage)
+                db_patient.priority = calculate_dynamic_priority(
+                    triage, 
+                    db_patient.survivalProbability, 
+                    data.spo2, 
+                    data.heart_rate
+                )
+                db.commit()
+        except Exception as e:
+            print(f"Error updating live vitals in DB: {e}")
+
+    return vitals_dict
 
 @app.get("/latest-vitals")
-def get_latest_vitals():
+def get_latest_vitals(patient_id: Optional[str] = None):
     """
-    Endpoint for frontend to poll the latest vitals from Android bridge.
+    Endpoint for frontend to poll the latest vitals.
     """
+    if patient_id and patient_id in latest_vitals_by_patient:
+        return latest_vitals_by_patient[patient_id]
     return latest_vitals
 
 
@@ -191,13 +243,6 @@ def get_latest_vitals():
 # PATIENT MANAGEMENT ROUTES
 # ============================================================
 
-def get_db():
-    from app.database import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @app.post("/patients")
 def create_patient(patient: PatientCreate, db = Depends(get_db)):
@@ -1113,13 +1158,6 @@ class PatientUserResponse(BaseModel):
     username: str
     patientId: Optional[str]
 
-def get_db():
-    from app.database import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @app.get("/users/doctors", response_model=list[DoctorUserResponse])
 def list_doctors(

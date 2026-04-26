@@ -18,6 +18,7 @@ function TriageApp() {
   const [systolicBP, setSystolicBP] = useState("");
   const [unconscious, setUnconscious] = useState(false);
   const [liveVitals, setLiveVitals] = useState(null);
+  const [isManualOverride, setIsManualOverride] = useState(false);
   const [currentUsername, setCurrentUsername] = useState("");
   const [currentPatientId, setCurrentPatientId] = useState("");
   const [chatOpen, setChatOpen] = useState(false);
@@ -29,7 +30,7 @@ function TriageApp() {
   useEffect(() => {
     const token = localStorage.getItem("token");
     const storedPatientId = localStorage.getItem("patientId");
-    
+
     if (storedPatientId) {
       setCurrentPatientId(storedPatientId);
     }
@@ -41,6 +42,12 @@ function TriageApp() {
         // Store user ID for chat integration
         if (payload.user_id) {
           localStorage.setItem("userId", payload.user_id);
+        }
+
+        // Fallback: if no patientId in localStorage, use username or a temp ID
+        if (!storedPatientId) {
+          const fallbackId = payload.patientId || payload.username || `TEMP-${Math.floor(Date.now() / 1000)}`;
+          setCurrentPatientId(fallbackId);
         }
       } catch (e) {
         // token not decodable, ignore
@@ -108,32 +115,72 @@ function TriageApp() {
   // Enable message notifications
   useMessageNotifications();
 
-  // Poll for live vitals from Android Bridge
+  // Detect manual override reset
   useEffect(() => {
-    const pollVitals = async () => {
-      try {
-        const res = await axios.get(`${BASE_URL}/latest-vitals`);
+    if (!pulse && !spo2 && !systolicBP) {
+      // If all cleared, resume auto
+      setIsManualOverride(false);
+    }
+  }, [pulse, spo2, systolicBP]);
 
-        if (res.data && res.data.timestamp) {
-          console.log("Live vitals received:", res.data);
-          setLiveVitals(res.data);
-          // Auto-fill form if vitals are fresh (e.g., within last 30s)
-          const pingTime = new Date(res.data.timestamp).getTime();
-          const now = new Date().getTime();
-          if (now - pingTime < 30000) {
-            if (!pulse) setPulse(res.data.heart_rate);
-            if (!spo2) setSpo2(res.data.spo2);
-            if (!systolicBP) setSystolicBP(res.data.systolic_bp);
-          }
-        }
+  // Vitals Simulator (Background Process)
+  useEffect(() => {
+    if (!currentPatientId) return;
+
+    const generateVitals = async () => {
+      const simulatedData = {
+        heart_rate: Math.floor(Math.random() * (140 - 80 + 1)) + 80,
+        spo2: Math.floor(Math.random() * (100 - 85 + 1)) + 85,
+        systolic_bp: Math.floor(Math.random() * (120 - 70 + 1)) + 70,
+        diastolic_bp: Math.floor(Math.random() * (90 - 60 + 1)) + 60,
+        patient_id: currentPatientId
+      };
+
+      try {
+        await axios.post(`${BASE_URL}/realtime-vitals`, simulatedData);
       } catch (err) {
-        // Silent fail for polling errors to avoid UI noise
+        console.error("Simulation error:", err);
       }
     };
 
-    const interval = setInterval(pollVitals, 3000);
-    return () => clearInterval(interval);
-  }, [pulse, spo2, systolicBP]);
+    const timeoutId = setTimeout(generateVitals, 3000);
+    const intervalId = setInterval(generateVitals, 180000);
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
+  }, [currentPatientId]);
+
+  // Poll for live vitals
+  useEffect(() => {
+    const pollVitals = async () => {
+      try {
+        const res = await axios.get(`${BASE_URL}/latest-vitals`, {
+          params: { patient_id: currentPatientId }
+        });
+
+        if (res.data && res.data.timestamp) {
+          setLiveVitals(res.data);
+
+          // Auto-fill form if manual override is not active
+          if (!isManualOverride) {
+            setPulse(res.data.heart_rate);
+            setSpo2(res.data.spo2);
+            setSystolicBP(res.data.systolic_bp);
+          }
+        }
+      } catch (err) {
+        // Silent fail
+      }
+    };
+
+    const timeoutId = setTimeout(pollVitals, 3000);
+    const intervalId = setInterval(pollVitals, 180000);
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
+  }, [currentPatientId, isManualOverride]);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -328,13 +375,7 @@ function TriageApp() {
 
       <div className="relative z-10 max-w-4xl mx-auto px-4 pt-6 pb-32">
         {/* Top Navigation */}
-        <nav className="flex justify-between items-center mb-8 animate-fade-in">
-          <button 
-            onClick={() => navigate("/home")}
-            className="w-10 h-10 glass-panel rounded-full flex items-center justify-center text-gray-400 hover:text-white transition-colors"
-          >
-            ←
-          </button>
+        <nav className="flex justify-end items-center mb-8 animate-fade-in">
           <div className="flex gap-2">
             <button
               onClick={() => {
@@ -345,11 +386,10 @@ function TriageApp() {
                 setChatOpen(true);
               }}
               disabled={!doctorReady}
-              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                doctorReady 
-                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 glow-on-hover' 
-                : 'bg-white/5 text-gray-500 border border-white/5'
-              }`}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${doctorReady
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 glow-on-hover'
+                  : 'bg-white/5 text-gray-500 border border-white/5'
+                }`}
             >
               💬 {doctorReady ? 'Live Medic' : 'Medic Offline'}
             </button>
@@ -357,7 +397,7 @@ function TriageApp() {
               onClick={handleLogout}
               className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl text-xs font-black uppercase tracking-widest"
             >
-              Terminate
+              Logout
             </button>
           </div>
         </nav>
@@ -383,6 +423,9 @@ function TriageApp() {
                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
                 Biometric Stream
               </h3>
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 flex items-center gap-1 animate-pulse">
+                👉 Live IoT Vitals Streaming Enabled
+              </span>
               {liveVitals?.timestamp && (
                 <span className="text-[10px] font-mono text-emerald-400/70">
                   {new Date(liveVitals.timestamp).toLocaleTimeString()}
@@ -404,11 +447,10 @@ function TriageApp() {
                   <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">BP</p>
                   <p className="text-2xl font-black font-['Outfit']">{liveVitals.systolic_bp}<span className="text-xs text-gray-600 ml-1">SYS</span></p>
                 </div>
-                <div className={`p-4 rounded-2xl flex flex-col justify-center border ${
-                  liveVitals.triage === 'RED' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
-                  liveVitals.triage === 'YELLOW' ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' :
-                  'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
-                }`}>
+                <div className={`p-4 rounded-2xl flex flex-col justify-center border ${liveVitals.triage === 'RED' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
+                    liveVitals.triage === 'YELLOW' ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' :
+                      'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                  }`}>
                   <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Status</p>
                   <p className="text-lg font-black">{liveVitals.triage}</p>
                 </div>
@@ -425,7 +467,7 @@ function TriageApp() {
             {/* Visual Assessment */}
             <section className="glass-panel rounded-[2rem] p-6 border-white/5 space-y-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-amber-400">📷 Visual Data</h3>
-              
+
               {!cameraOn ? (
                 <button
                   onClick={startCamera}
@@ -443,7 +485,7 @@ function TriageApp() {
                   </div>
                 </div>
               )}
-              
+
               <div className="relative">
                 <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="img-upload" />
                 <label htmlFor="img-upload" className="flex items-center justify-center gap-2 py-3 w-full glass-card rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-white/5">
@@ -497,102 +539,100 @@ function TriageApp() {
 
           {/* MANUAL OVERRIDES */}
           <section className="glass-panel rounded-[2rem] p-6 border-white/5">
-             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-red-400 mb-6">⚙️ Manual Vitals Override</h3>
-             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <div className="space-y-1">
-                  <p className="text-[10px] text-gray-500 font-bold uppercase ml-1">Pulse</p>
-                  <input type="number" value={pulse} onChange={(e) => setPulse(e.target.value)} className="w-full glass-card rounded-xl p-3 text-sm" placeholder="BPM" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] text-gray-500 font-bold uppercase ml-1">SpO2</p>
-                  <input type="number" value={spo2} onChange={(e) => setSpo2(e.target.value)} className="w-full glass-card rounded-xl p-3 text-sm" placeholder="%" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] text-gray-500 font-bold uppercase ml-1">Sys BP</p>
-                  <input type="number" value={systolicBP} onChange={(e) => setSystolicBP(e.target.value)} className="w-full glass-card rounded-xl p-3 text-sm" placeholder="mmHg" />
-                </div>
-             </div>
-             <label className="flex items-center gap-3 p-4 glass-card rounded-2xl cursor-pointer hover:bg-white/5 transition-colors">
-                <input type="checkbox" checked={unconscious} onChange={(e) => setUnconscious(e.target.checked)} className="w-5 h-5 rounded-lg border-white/10 bg-white/5 text-cyan-500 focus:ring-cyan-500" />
-                <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">Unconscious State Detected</span>
-             </label>
+            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-red-400 mb-6">⚙️ Manual Vitals Override</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="space-y-1">
+                <p className="text-[10px] text-gray-500 font-bold uppercase ml-1">Pulse</p>
+                <input type="number" value={pulse} onChange={(e) => { setPulse(e.target.value); setIsManualOverride(true); }} className="w-full glass-card rounded-xl p-3 text-sm" placeholder="BPM" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] text-gray-500 font-bold uppercase ml-1">SpO2</p>
+                <input type="number" value={spo2} onChange={(e) => { setSpo2(e.target.value); setIsManualOverride(true); }} className="w-full glass-card rounded-xl p-3 text-sm" placeholder="%" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] text-gray-500 font-bold uppercase ml-1">Sys BP</p>
+                <input type="number" value={systolicBP} onChange={(e) => { setSystolicBP(e.target.value); setIsManualOverride(true); }} className="w-full glass-card rounded-xl p-3 text-sm" placeholder="mmHg" />
+              </div>
+            </div>
+            <label className="flex items-center gap-3 p-4 glass-card rounded-2xl cursor-pointer hover:bg-white/5 transition-colors">
+              <input type="checkbox" checked={unconscious} onChange={(e) => setUnconscious(e.target.checked)} className="w-5 h-5 rounded-lg border-white/10 bg-white/5 text-cyan-500 focus:ring-cyan-500" />
+              <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">Unconscious State Detected</span>
+            </label>
           </section>
 
           {/* RESULTS SECTION */}
           {result && (
             <section className="glass-panel rounded-[3rem] p-8 border-white/5 animate-fade-in shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-               <div className="text-center mb-10">
-                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-500 mb-2">Final Classification</p>
-                  <div className={`inline-block px-12 py-6 rounded-3xl text-4xl font-black font-['Outfit'] shadow-2xl border-2 ${
-                    result.triage_level === 'Red' ? 'bg-red-500/20 border-red-500/40 text-red-400 animate-pulse' :
+              <div className="text-center mb-10">
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-500 mb-2">Final Classification</p>
+                <div className={`inline-block px-12 py-6 rounded-3xl text-4xl font-black font-['Outfit'] shadow-2xl border-2 ${result.triage_level === 'Red' ? 'bg-red-500/20 border-red-500/40 text-red-400 animate-pulse' :
                     result.triage_level === 'Yellow' ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' :
-                    result.triage_level === 'Black' ? 'bg-gray-800 border-gray-700 text-gray-400' :
-                    'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                      result.triage_level === 'Black' ? 'bg-gray-800 border-gray-700 text-gray-400' :
+                        'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
                   }`}>
-                    {result.triage_level.toUpperCase()}
-                  </div>
-               </div>
+                  {result.triage_level.toUpperCase()}
+                </div>
+              </div>
 
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-                  <div className="space-y-6">
-                    <div className="glass-card p-6 rounded-3xl border-white/5">
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-4">🧠 AI Rationale</h4>
-                      <p className="text-sm leading-relaxed text-gray-300 font-medium italic">"{result.explanation}"</p>
-                    </div>
-                    
-                    <div className="glass-card p-6 rounded-3xl border-white/5">
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-4">💡 Protocol Advice</h4>
-                      <ul className="space-y-3">
-                        {result.recommended_action.map((action, i) => (
-                          <li key={i} className="text-xs font-bold text-gray-200 flex items-start gap-3">
-                            <span className="text-emerald-500">→</span> {action}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+                <div className="space-y-6">
+                  <div className="glass-card p-6 rounded-3xl border-white/5">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-4">🧠 AI Rationale</h4>
+                    <p className="text-sm leading-relaxed text-gray-300 font-medium italic">"{result.explanation}"</p>
                   </div>
 
-                  <div className="space-y-6">
-                    <div className="glass-card p-6 rounded-3xl border-white/5">
-                       <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-4">🚀 Optimized Logistics</h4>
-                       <div className="space-y-3">
-                          {result.resource_advice.output.map((advice, i) => (
-                            <p key={i} className="text-xs font-bold text-amber-100 flex items-start gap-3">
-                              <span className="text-amber-500">⚡</span> {advice}
-                            </p>
-                          ))}
-                       </div>
-                    </div>
+                  <div className="glass-card p-6 rounded-3xl border-white/5">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-4">💡 Protocol Advice</h4>
+                    <ul className="space-y-3">
+                      {result.recommended_action.map((action, i) => (
+                        <li key={i} className="text-xs font-bold text-gray-200 flex items-start gap-3">
+                          <span className="text-emerald-500">→</span> {action}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
 
-                    <div className="glass-card p-6 rounded-3xl border-white/5">
-                       <h4 className="text-[10px] font-black uppercase tracking-widest text-cyan-400 mb-6">📊 Confidence Matrix</h4>
-                       <div className="space-y-4">
-                          {Object.entries(result.probabilities).map(([label, val]) => (
-                            <div key={label} className="space-y-1.5">
-                              <div className="flex justify-between text-[10px] font-black uppercase">
-                                <span className="text-gray-500">{label}</span>
-                                <span className="text-cyan-400">{(val * 100).toFixed(1)}%</span>
-                              </div>
-                              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                <div className={`h-full transition-all duration-1000 ${
-                                  label === 'Red' ? 'bg-red-500' : 
-                                  label === 'Yellow' ? 'bg-amber-500' : 
+                <div className="space-y-6">
+                  <div className="glass-card p-6 rounded-3xl border-white/5">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-4">🚀 Optimized Logistics</h4>
+                    <div className="space-y-3">
+                      {result.resource_advice.output.map((advice, i) => (
+                        <p key={i} className="text-xs font-bold text-amber-100 flex items-start gap-3">
+                          <span className="text-amber-500">⚡</span> {advice}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="glass-card p-6 rounded-3xl border-white/5">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-cyan-400 mb-6">📊 Confidence Matrix</h4>
+                    <div className="space-y-4">
+                      {Object.entries(result.probabilities).map(([label, val]) => (
+                        <div key={label} className="space-y-1.5">
+                          <div className="flex justify-between text-[10px] font-black uppercase">
+                            <span className="text-gray-500">{label}</span>
+                            <span className="text-cyan-400">{(val * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div className={`h-full transition-all duration-1000 ${label === 'Red' ? 'bg-red-500' :
+                                label === 'Yellow' ? 'bg-amber-500' :
                                   label === 'Black' ? 'bg-gray-600' : 'bg-emerald-500'
-                                }`} style={{ width: `${val * 100}%` }}></div>
-                              </div>
-                            </div>
-                          ))}
-                       </div>
+                              }`} style={{ width: `${val * 100}%` }}></div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-               </div>
+                </div>
+              </div>
 
-               <button
-                  onClick={downloadPDF}
-                  className="w-full py-5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-black rounded-2xl text-sm uppercase tracking-[0.2em] shadow-2xl transition-all"
-               >
-                 Download Full Report PDF
-               </button>
+              <button
+                onClick={downloadPDF}
+                className="w-full py-5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-black rounded-2xl text-sm uppercase tracking-[0.2em] shadow-2xl transition-all"
+              >
+                Download Full Report PDF
+              </button>
             </section>
           )}
         </div>

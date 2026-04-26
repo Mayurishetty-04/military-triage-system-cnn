@@ -294,12 +294,12 @@ const EmergencyResponseModal = ({ patient, onClose, onAcknowledge }) => {
                             {isAcknowledging ? (
                                 <>
                                     <span style={{ width: '20px', height: '20px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }}></span>
-                                    🧬 CONFIRMING...
+                                    🧬 ACKNOWLEDGING...
                                 </>
                             ) : isDone ? (
-                                <>✅ RECEIPT CONFIRMED</>
+                                <>✅ CASE ACKNOWLEDGED</>
                             ) : (
-                                <>⚡ CONFIRM RECEIPT</>
+                                <>⚡ ACKNOWLEDGE CASE</>
                             )}
                         </button>
                     </div>

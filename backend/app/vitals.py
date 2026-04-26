@@ -57,15 +57,15 @@ def get_vitals_probs(pulse, spo2, systolic_bp, unconscious):
     bp = systolic_bp if systolic_bp is not None else 120
 
     # BLACK conditions
-    if s < 80 or bp < 60:
+    if s < 70 or p > 160 or bp < 60:
         scores["Black"] += 0.8
         scores["Red"] += 0.2
     # RED conditions
-    elif p > 120 or p < 50 or s < 90 or bp < 80 or bp > 160:
+    elif p > 130 or p < 40 or s < 90 or bp < 80 or bp > 180:
         scores["Red"] += 0.8
         scores["Yellow"] += 0.2
     # YELLOW conditions
-    elif p > 100 or p < 60 or s < 95 or bp < 90 or bp > 140:
+    elif p > 100 or p < 60 or s < 94 or bp < 90 or bp > 140:
         scores["Yellow"] += 0.7
         scores["Green"] += 0.3
     # GREEN conditions
@@ -155,17 +155,17 @@ def calculate_dynamic_survival(v, final_label):
 
 def get_hr_status(hr):
     if hr is None: return "Unknown"
-    if hr > 120: return "Severe Tachycardia"
+    if hr > 130: return "Severe Tachycardia"
     if hr > 100: return "Mild Tachycardia"
-    if hr < 50: return "Severe Bradycardia"
+    if hr < 40: return "Severe Bradycardia"
     if hr < 60: return "Mild Bradycardia"
     return "Normal"
 
 def get_spo2_status(spo2):
     if spo2 is None: return "Unknown"
     if spo2 < 85: return "Severe Hypoxemia"
-    if spo2 < 92: return "Moderate Hypoxemia"
-    if spo2 < 95: return "Mild Hypoxemia"
+    if spo2 < 90: return "Moderate Hypoxemia"
+    if spo2 < 94: return "Mild Hypoxemia"
     return "Normal"
 
 def get_bp_status(sys_bp):
